@@ -109,6 +109,15 @@ final case class YuPrivate(name: String, private val secret: Int) {
   def reveal: Int = secret
 }
 final case class YuWrapper(value: Int) extends AnyVal
+// a user-provided item decoder counting the items it reads: shows which items of a list are decoded
+final case class YuCountedItem(value: Int)
+object YuCountedItem {
+  var calls = 0
+  given YamlDecoder[YuCountedItem] = YamlDecoder.forInt.map { i => calls += 1; YuCountedItem(i) }.mapError { i =>
+    if i.value < 0 then Left(ConstructError.from(s"negative: ${i.value}")) else Right(i)
+  }
+}
+final case class YuCountedItems(items: List[YuCountedItem], label: String)
 final case class YuWrapped(id: YuWrapper)
 
 /** scala-yaml's own derivation tests, run through Kindlings (default `YamlConfig`) and scala-yaml's `derived`, and
@@ -517,6 +526,35 @@ final class YamlUpstreamSuitesOracleSpec extends MacroSuite {
       // decodes every field and then reports the first failure - so for `a: x` it also evaluated the default of `b`.
       assertEquals(kindlings.drop(6), List("Right(YuLazyDefault(1,test-4))", "evaluated 4 times"))
       assertEquals(upstream.drop(6), List("Right(YuLazyDefault(1,test-5))", "evaluated 5 times"))
+    }
+
+    test("collection items after a failing item are not decoded; withAccumulatingErrors reports every failure") {
+      val kindlings: YamlDecoder[YuCountedItems] =
+        KindlingsYamlDecoder.derived[YuCountedItems](using YamlConfig.default)
+      val upstream: YamlDecoder[YuCountedItems] = YamlDecoder.derived
+      val yaml = "items: [1, -2, x, -4, 5]\nlabel: l"
+      def run(decoder: YamlDecoder[YuCountedItems]): (String, Int) = {
+        YuCountedItem.calls = 0
+        (decode(decoder, yaml), YuCountedItem.calls)
+      }
+      val (kindlingsResult, kindlingsCalls) = run(kindlings)
+      val (upstreamResult, upstreamCalls) = run(upstream)
+      // the same (first) failure
+      assertEquals(kindlingsResult, upstreamResult)
+      assertEquals(decode(kindlings, "items: [1, 2]\nlabel: l"), decode(upstream, "items: [1, 2]\nlabel: l"))
+      // Documented difference (feature-parity.md, yaml-derivation): scala-yaml's forList decodes every item before it
+      // reports the first failure, Kindlings stops at it.
+      assertEquals(kindlingsCalls, 2)
+      assertEquals(upstreamCalls, 4)
+      // Opt-in (feature-parity.md): every failing item with its index
+      val accumulating = KindlingsYamlDecoder.derived[YuCountedItems](using YamlConfig.default.withAccumulatingErrors)
+      YuCountedItem.calls = 0
+      val Left(error) = accumulating.construct(yaml.asNode.toOption.get): @unchecked
+      assertEquals(
+        hearth.kindlings.yamlderivation.YamlDecodingFailures.of(error).map(_.path),
+        List(".items[1]", ".items[2]", ".items[3]")
+      )
+      assertEquals(YuCountedItem.calls, 4)
     }
 
     test("Any: aliases, Map[Any, Any], precise doubles, non-finite floats") {

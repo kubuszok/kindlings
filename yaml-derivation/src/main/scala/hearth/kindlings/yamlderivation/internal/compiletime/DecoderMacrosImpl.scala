@@ -450,7 +450,31 @@ trait DecoderMacrosImpl
         }
       }
 
-  /** The name of the runtime class of `A`, as the `ClassTag` of scala-yaml's `YamlDecoder { case ... }` instances gives
+  /** The decoding of `failFast` or `accumulating` as the configuration says (`YamlConfig.accumulatingErrors`): only the
+    * one it selects when the configuration is known at compile time, otherwise both and a check of the configuration
+    * (each in a local def of its own when `ownDefs`, so that the calling method does not hold both bodies).
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  def byErrorMode[R: Type](failFast: => Expr[R], accumulating: => Expr[R], ownDefs: Boolean = false)(implicit
+      ctx: DecoderCtx[?]
+  ): Expr[R] =
+    ctx.evaluatedConfig match {
+      case Some(config) => if (config.accumulatingErrors) accumulating else failFast
+      case None         =>
+        implicit val ConfigT: Type[YamlConfig] = DTypes.YamlConfig
+        def check(failFastExpr: Expr[R], accumulatingExpr: Expr[R]): Expr[R] = Expr.quote {
+          if (Expr.splice(ctx.config).accumulatingErrors) Expr.splice(accumulatingExpr) else Expr.splice(failFastExpr)
+        }
+        if (ownDefs)
+          ValDefs.createDef[R](failFast, FreshName.FromPrefix("decodeFailFast")).use { failFastDef =>
+            ValDefs.createDef[R](accumulating, FreshName.FromPrefix("decodeAccumulating")).use { accumulatingDef =>
+              check(failFastDef, accumulatingDef)
+            }
+          }
+        else check(failFast, accumulating)
+    }
+
+  /** The name of the runtime class of `A`, as the `ClassTag`of scala-yaml's `YamlDecoder { case ... }` instances gives
     * it in their failures (`Could't construct scala.collection.immutable.List from ...`).
     */
   def runtimeClassName[A: Type]: String = Type[A].getRuntimeClass match {
@@ -537,6 +561,8 @@ trait DecoderMacrosImpl
     val StringNodeTuple: Type.Lazy[(String, Node)] = Type.Lazy(Type.of[(String, Node)])
     val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
     val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
+    val FailureAccumulator: Type.Lazy[YamlDerivationUtils.FailureAccumulator] =
+      Type.Lazy(Type.of[YamlDerivationUtils.FailureAccumulator])
 
     def DecoderResult[A: Type]: Type[Either[ConstructError, A]] =
       Type.of[Either[ConstructError, A]]

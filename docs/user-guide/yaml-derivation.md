@@ -132,6 +132,8 @@ scala-yaml's `Cannot parse ...`). Union types (no scala-yaml counterpart) are al
 | `withoutUseDefaults` | Missing fields fail even when they have a default (Kindlings 0.3.x's default) |
 | `withEmptyCollectionsAsFlow` | `toYamlString` prints empty sequences as `[]` and empty mappings as `{}` (also nested), so the printed YAML decodes back (default: an empty value, as scala-yaml's printer) |
 | `withoutEmptyCollectionsAsFlow` | Empty collections printed as an empty value (the default, as scala-yaml) |
+| `withAccumulatingErrors` | Decoders decode every field and report **all** failures in one `ConstructError`, each with its path (see [Decoding failures](#decoding-failures)) |
+| `withFailFastErrors` | Decoders stop at the first failure and report only it (the default, as scala-yaml reports one failure) |
 
 `YamlConfig.kindlings03Defaults` restores both defaults of Kindlings 0.3.x (`withoutUseDefaults.withWrappedSubtypes`).
 
@@ -142,6 +144,59 @@ results, read when the instance runs; a derived encoder/decoder then computes th
 `transformMemberNames`/`transformConstructorNames` give once per instance (the inline `KindlingsYamlEncoder.encode`/
 `KindlingsYamlDecoder.decode` have no instance and compute them on every call), and resolves the instances of its fields and subtypes (e.g. an
 `implicit def` `YamlEncoder`) once per instance, not on every call.
+
+## Decoding failures
+
+The configuration chooses one of two ways to report decoding failures (`YamlConfig#accumulatingErrors`):
+
+- **Fail fast** (the default): decoding stops at the first failure, in field order, and returns it as it is, the same
+  `ConstructError` scala-yaml reports. The fields after it, the items of a collection after a failing item and the
+  entries of a map after a failing entry are not decoded at all (nor are the defaults of absent fields evaluated).
+- **Accumulating** (`withAccumulatingErrors`): every field is decoded, recursively (nested case classes, the items of
+  collections, the keys and values of maps, `Option`s, the subtype selected by a discriminator or wrapper), and the
+  result is **one** `ConstructError` listing every failure with its path: `.field` for a field or a map entry,
+  `[index]` for a collection item, e.g. `.address.zip` or `.shapes[1].width`. The error type stays scala-yaml's
+  `ConstructError`; `YamlDecodingFailures.of(error)` gives the individual failures (`YamlDecodingFailure(path, error)`,
+  each the error the value's decoder reported). A failure that is not of a field (e.g. the node is not a mapping) is
+  reported as it is. Untagged subtypes are still decoded by trying each one, so when none decodes the failure is
+  scala-yaml's `Cannot parse ...`. A user-provided decoder is called as it is: its failure is recorded under its path.
+
+??? example "Fail fast vs accumulating failures"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-yaml-derivation:{{ kindlings_version() }}
+    //> using dep org.virtuslab::scala-yaml:{{ libraries.scalaYaml }}
+
+    import hearth.kindlings.yamlderivation._
+    import org.virtuslab.yaml.ConstructError
+
+    case class Address(street: String, zip: Int)
+    case class Person(name: String, age: Int, address: Address, tags: List[Int])
+
+    val yaml = "name: Alice\nage: thirty\naddress:\n  street: Main\n  zip: abc\ntags: [1, x, 3]"
+
+    // the default: only the first failure
+    KindlingsYamlDecoder.fromYamlString[Person](yaml) match {
+      case Left(error: ConstructError) => println(YamlDecodingFailures.of(error).size)
+      case other                       => println(other)
+    }
+    // expected output:
+    // 1
+
+    // opt-in: every failure, with its path
+    val accumulating: YamlConfig = YamlConfig.default.withAccumulatingErrors
+    KindlingsYamlDecoder.fromYamlString[Person](yaml)(accumulating) match {
+      case Left(error: ConstructError) => println(YamlDecodingFailures.of(error).map(_.path))
+      case other                       => println(other)
+    }
+    // expected output:
+    // List(.age, .address.zip, .tags[1])
+    ```
+
+The mode is part of the configuration known at compile time, so a decoder derived for one mode contains only that
+mode's code: the fail-fast code has no failure accumulation at all. With a configuration only known at runtime the
+decoder contains both and checks `accumulatingErrors` once per decoded value.
 
 ## Map keys
 

@@ -202,13 +202,14 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
                       (fName, castTo[Field](valExpr).as_??)
                     }
-                    (decodeExpr(_), makeFieldArg)
+                    (decodeExpr(_), makeFieldArg, fieldNameExpr)
                   }
                 }
               }
               .flatMap { fieldData =>
                 val decodeExprs = fieldData.toList.map(_._1)
                 val makeFieldArgs = fieldData.toList.map(_._2)
+                val fieldNameExprs = fieldData.toList.map(_._3).toVector
 
                 def constructFF(boundValues: List[Expr[Any]]): Expr[A] = {
                   val nonTransientFieldMap: Map[String, Expr_??] =
@@ -228,11 +229,13 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   }
                 }
                 implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
-                // Like scala-yaml, the first failing field (in field order) is reported and the later ones are not
-                // decoded: each field is decoded by its own local def, and the value is constructed when the last
-                // result is a `Right` (see FlatFieldsConstruct).
-                // The mapping is read once (`fieldNodes`); each field is then a hash lookup.
-                def construct(fields: Expr[java.util.HashMap[String, Node]]): Expr[Either[ConstructError, A]] =
+                implicit val FailuresT: Type[YamlDerivationUtils.FailureAccumulator] = DTypes.FailureAccumulator
+                // Fail fast (the default, like scala-yaml): the first failing field (in field order) is reported and
+                // the later ones are not decoded: each field is decoded by its own local def, and the value is
+                // constructed when the last result is a `Right` (see FlatFieldsConstruct).
+                def constructFailFastFrom(
+                    fields: Expr[java.util.HashMap[String, Node]]
+                ): Expr[Either[ConstructError, A]] =
                   constructFailFast[Either[ConstructError, Any], A, Either[ConstructError, A]](
                     decodeExprs.map(_(fields))
                   )(
@@ -241,6 +244,40 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     construct = constructFF,
                     onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConstructError, A]),
                     onFailure = r => Expr.quote(Expr.splice(r).asInstanceOf[Either[ConstructError, A]])
+                  )
+                // Accumulating (`withAccumulatingErrors`): every field is decoded and each failure is recorded under
+                // the field's name (`null`: no failure so far, nothing allocated while the fields decode).
+                def constructAccumulatingFrom(
+                    fields: Expr[java.util.HashMap[String, Node]]
+                ): Expr[Either[ConstructError, A]] =
+                  constructAccumulatingIndexed[
+                    Either[ConstructError, Any],
+                    YamlDerivationUtils.FailureAccumulator,
+                    A,
+                    Either[ConstructError, A]
+                  ](
+                    decodeExprs.map(_(fields))
+                  )(
+                    mergeErrors = (index, failures, r) =>
+                      Expr.quote(
+                        YamlDerivationUtils.addFieldFailure(
+                          Expr.splice(failures),
+                          Expr.splice(fieldNameExprs(index)),
+                          Expr.splice(r)
+                        )
+                      ),
+                    valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConstructError, Any]].value),
+                    construct = constructFF,
+                    onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConstructError, A]),
+                    onFailure =
+                      failures => Expr.quote(YamlDerivationUtils.accumulatedFailures[A](Expr.splice(failures)))
+                  )
+                // The mapping is read once (`fieldNodes`); each field is then a hash lookup.
+                def construct(fields: Expr[java.util.HashMap[String, Node]]): Expr[Either[ConstructError, A]] =
+                  byErrorMode[Either[ConstructError, A]](
+                    constructFailFastFrom(fields),
+                    constructAccumulatingFrom(fields),
+                    ownDefs = true
                   )
                 MIO.pure(
                   ValDefs

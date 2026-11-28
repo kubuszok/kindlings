@@ -43,7 +43,10 @@ trait DecoderHandleAsCollectionRuleImpl {
                     val buildStep = isCollection.value.build
                     val classNameExpr: Expr[String] = Expr(runtimeClassName[A])
 
-                    val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
+                    implicit val BuilderT: Type[scala.collection.mutable.Builder[Item, CtorResult]] =
+                      Type.of[scala.collection.mutable.Builder[Item, CtorResult]]
+                    // fail fast: the first failing item ends the decoding
+                    def readLoopFailFast: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
                       val collBuilder = Expr.splice(factoryExpr).newBuilder
                       val decoder = YamlDerivationUtils.decoderFromFn(Expr.splice(decodeFn))
                       // anything but a sequence (a null included) fails as scala-yaml's collection decoders
@@ -58,6 +61,30 @@ trait DecoderHandleAsCollectionRuleImpl {
                         }
                       collBuilder
                     }
+                    // accumulating: every item is decoded, each failure is recorded under its index
+                    def readLoopAccumulating: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
+                      val collBuilder = Expr.splice(factoryExpr).newBuilder
+                      val decoder = YamlDerivationUtils.decoderFromFn(Expr.splice(decodeFn))
+                      val iter = YamlDerivationUtils
+                        .sequenceNodes(Expr.splice(dctx.node), Expr.splice(classNameExpr))
+                        .iterator
+                      var failures: YamlDerivationUtils.FailureAccumulator = null
+                      var index = 0
+                      while (iter.hasNext) {
+                        decoder.construct(iter.next())(LoadSettings.empty) match {
+                          case Right(item) => collBuilder += item
+                          case Left(err)   => failures = YamlDerivationUtils.addItemFailure(failures, index, err)
+                        }
+                        index += 1
+                      }
+                      if (failures != null) throw new YamlDerivationUtils.CollectionBuildException(failures.toError)
+                      collBuilder
+                    }
+                    val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] =
+                      byErrorMode[scala.collection.mutable.Builder[Item, CtorResult]](
+                        readLoopFailFast,
+                        readLoopAccumulating
+                      )
                     val buildResultExpr = buildStep.ctor(readLoop)
 
                     buildStep match {

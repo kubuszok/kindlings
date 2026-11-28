@@ -71,3 +71,11 @@ object YamlWideSumStaticInstances {
     val decoder: KindlingsYamlDecoder[WideSum] = KindlingsYamlDecoder.derived[WideSum]
   }
 }
+
+/** `ErrPerson` decoders with the decoding-error mode known at compile time (see DecodingErrorModesSpec). */
+object YamlStaticErrorModeInstances {
+  val failFast: KindlingsYamlDecoder[ErrPerson] =
+    KindlingsYamlDecoder.derived[ErrPerson](YamlConfig().withFailFastErrors)
+  val accumulating: KindlingsYamlDecoder[ErrPerson] =
+    KindlingsYamlDecoder.derived[ErrPerson](YamlConfig().withAccumulatingErrors)
+}

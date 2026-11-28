@@ -112,6 +112,26 @@ trait FlatFieldsConstruct { this: MacroCommons =>
       onSuccess: Expr[A] => Expr[Out],
       onFailure: Expr[E] => Expr[Out],
       extraErrors: Option[Expr[E] => Expr[E]] = None
+  ): Expr[Out] =
+    constructAccumulatingIndexed[R, E, A, Out](fieldResults)(
+      (_, errors, result) => mergeErrors(errors, result),
+      valueOf,
+      construct,
+      onSuccess,
+      onFailure,
+      extraErrors
+    )
+
+  /** [[constructAccumulating]] whose `mergeErrors` also gets the field's index (in `fieldResults`), e.g. to record the
+    * failure under the field's name.
+    */
+  protected def constructAccumulatingIndexed[R: Type, E: Type, A: Type, Out: Type](fieldResults: List[Expr[R]])(
+      mergeErrors: (Int, Expr[E], Expr[R]) => Expr[E],
+      valueOf: Expr[R] => Expr[Any],
+      construct: List[Expr[Any]] => Expr[A],
+      onSuccess: Expr[A] => Expr[Out],
+      onFailure: Expr[E] => Expr[Out],
+      extraErrors: Option[Expr[E] => Expr[E]] = None
   ): Expr[Out] = {
     def finish(errors: Expr[E], bound: List[Expr[R]]): Expr[Out] = {
       val success = onSuccess(construct(bound.map(valueOf)))
@@ -123,7 +143,8 @@ trait FlatFieldsConstruct { this: MacroCommons =>
         case field :: rest =>
           ValDefs.createDef[R](field, FreshName.FromPrefix("field")).use { fieldDef =>
             ValDefs.createVal[R](fieldDef, FreshName.FromPrefix("fieldResult")).use { bound =>
-              ValDefs.createVal[E](mergeErrors(errors, bound), FreshName.FromPrefix("fieldErrors")).use { merged =>
+              val index = boundReversed.size
+              ValDefs.createVal[E](mergeErrors(index, errors, bound), FreshName.FromPrefix("fieldErrors")).use { merged =>
                 loop(rest, merged, bound :: boundReversed)
               }
             }

@@ -24,6 +24,12 @@ object YamlWideInstances {
   }
 }
 
+/** A wide decoder that accumulates errors (a compile-time configuration on Scala 3; read at runtime on Scala 2). */
+object YamlWideAccumulatingInstances {
+  implicit val config: YamlConfig = YamlConfig().withAccumulatingErrors
+  val decoder: KindlingsYamlDecoder[WideDefaults] = KindlingsYamlDecoder.derived[WideDefaults]
+}
+
 /** The same with a configuration only known at runtime: the subtype names are computed once per instance. */
 object YamlWideSumRuntimeInstances {
   def encoder(config: YamlConfig): KindlingsYamlEncoder[WideSum] = {
@@ -46,6 +52,28 @@ final class YamlBytecodeSizeSpec extends MacroSuite {
     assert(sizes.map(_._3).sum > 5000, s"expected the derived decoders' code, got: $sizes")
     val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
     assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
+  }
+
+  test("no method of the accumulating decoder derived for a 100-field case class exceeds HotSpot's JIT limit") {
+    val sizes = BytecodeSizes.methodSizes(YamlWideAccumulatingInstances.getClass)
+    assert(sizes.map(_._3).sum > 5000, s"expected the derived decoder's code, got: $sizes")
+    val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
+    assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
+  }
+
+  test("a decoding-error mode known at compile time leaves no runtime check of the configuration") {
+    // positive control: with a runtime configuration the decoder reads it
+    assert(BytecodeSizes.refersTo(YamlWideInstances.getClass, "accumulatingErrors"))
+    assert(!BytecodeSizes.refersTo(YamlStaticErrorModeInstances.getClass, "accumulatingErrors"))
+  }
+
+  test("the accumulating wide decoder reports every failure") {
+    val broken = KindlingsYamlEncoder.encode[Map[String, String]](Map("f1" -> "x", "f3" -> "y"))
+    val Left(error) = YamlWideAccumulatingInstances.decoder.construct(broken): @unchecked
+    YamlDecodingFailures.of(error).map(_.path) ==> List(".f1", ".f3")
+    val runtime = YamlWideInstances.decoderWith(YamlConfig().withAccumulatingErrors)
+    val Left(runtimeError) = runtime.construct(broken): @unchecked
+    YamlDecodingFailures.of(runtimeError) ==> YamlDecodingFailures.of(error)
   }
 
   test("no method of the instances derived for a sealed trait with 50 subtypes exceeds HotSpot's JIT limit") {
