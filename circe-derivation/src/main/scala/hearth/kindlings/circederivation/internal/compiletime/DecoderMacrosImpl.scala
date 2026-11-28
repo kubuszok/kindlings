@@ -374,10 +374,8 @@ trait DecoderMacrosImpl
               }
 
             def construct(values: Expr[Array[Any]], original: Expr[A]): Expr[A] = {
-              val fieldMap: Map[String, Expr_??] = caseClass
-                .caseFieldValuesAt(original)
-                .toList
-                .map { case (fName, fieldValue) =>
+              val fieldMap: Map[String, Expr_??] = allCaseFieldValuesAt(caseClass, original).toList.map {
+                case (fName, fieldValue) =>
                   import fieldValue.{Underlying as Field, value as fieldExpr}
                   val patched: Expr[Field] = patchedIndex.get(fName) match {
                     case Some(idx) =>
@@ -390,8 +388,7 @@ trait DecoderMacrosImpl
                     case None => fieldExpr // transient: keep the original value
                   }
                   (fName, patched.as_??)
-                }
-                .toMap
+              }.toMap
               foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                 onTypes = _ => Map.empty,
                 onValues = _ => fieldMap

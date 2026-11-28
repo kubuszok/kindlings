@@ -52,7 +52,7 @@ trait ShowCaseClassRuleImpl {
         ShowTypes.SensitiveData
       val paramsByName: Map[String, Parameter] = caseClass.primaryConstructor.totalParameters.flatten.toMap
 
-      NonEmptyList.fromList(caseClass.caseFieldValuesAt(value).toList) match {
+      NonEmptyList.fromList(allCaseFieldValuesAt(caseClass, value).toList) match {
         case Some(fieldValues) =>
           fieldValues
             .traverse { case (fieldName, fieldValue) =>

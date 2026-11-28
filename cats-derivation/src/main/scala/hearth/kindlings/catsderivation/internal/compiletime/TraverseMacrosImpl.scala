@@ -278,7 +278,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
     MIO {
       LambdaBuilder.of2[List[Any], Any]("newVals", "original").buildWith { case (newValsExpr, originalExpr) =>
         val faExpr: Expr[F[Any]] = Expr.quote(Expr.splice(originalExpr).asInstanceOf[F[Any]])
-        val fields = caseClass.caseFieldValuesAt(faExpr).toList
+        val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
         var currentList: Expr[List[Any]] = newValsExpr
         val fieldExprs: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
           import fieldValue.Underlying as Field
@@ -314,7 +314,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[Any]] = {
     import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
 
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
 
     val gFieldExprs: List[Expr[CatsDerivationFactories.AnyF[Any]]] = fields.collect {
       case (fieldName, fieldValue) if directFields.contains(fieldName) =>
@@ -369,7 +369,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
       bExpr: Expr[Any],
       fExpr: Expr[(Any, Any) => Any]
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[Any]] = {
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
 
     var result: Expr[Any] = bExpr
     fields.foreach { case (fieldName, fieldValue) =>
@@ -408,7 +408,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
       AnyType: Type[Any],
       EvalAnyType: Type[cats.Eval[Any]]
   ): MIO[Expr[cats.Eval[Any]]] = {
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
 
     val foldableFields: List[(String, Expr[Any], Option[Expr[Any]])] = fields.collect {
       case (fieldName, fieldValue) if directFields.contains(fieldName) =>
@@ -557,7 +557,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                         Expr.quote(Expr.splice(gExpr).asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]])
                       MIO.pure(Expr.quote(Expr.splice(gE).pure(Expr.splice(caseValue.upcast[Any]))).upcast[Any])
                     case Right(cc) =>
-                      val fields = cc.caseFieldValuesAt(caseValue).toList
+                      val fields = allCaseFieldValuesAt(cc, caseValue).toList
                       if (fields.isEmpty) {
                         val gE =
                           Expr.quote(Expr.splice(gExpr).asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]])
@@ -689,7 +689,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                   CaseClass.parse[CT].toEither match {
                     case Left(_)   => MIO.pure(bExpr)
                     case Right(cc) =>
-                      val fields = cc.caseFieldValuesAt(caseValue).toList
+                      val fields = allCaseFieldValuesAt(cc, caseValue).toList
                       var result: Expr[Any] = bExpr
                       fields
                         .traverse { case (fn, fv) =>
@@ -746,7 +746,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                   CaseClass.parse[CT].toEither match {
                     case Left(_)   => MIO.pure(lbExpr)
                     case Right(cc) =>
-                      val fields = cc.caseFieldValuesAt(caseValue).toList
+                      val fields = allCaseFieldValuesAt(cc, caseValue).toList
                       val foldableMIO: MIO[List[Option[(Expr[Any], Option[Expr[Any]])]]] =
                         fields.traverse { case (fn, fv) =>
                           import fv.Underlying as Field

@@ -32,7 +32,7 @@ import hearth.fp.effect.*
   * `;` and `|` are never split by either compiler, so the value arrives intact and we split it ourselves. (Indexed keys
   * would also work but are noisier.)
   */
-trait DerivationPolicy extends JavaEnumSupport { this: MacroCommons =>
+trait DerivationPolicy extends JavaEnumSupport with CaseFieldValuesSupport { this: MacroCommons =>
   // $COVERAGE-OFF$
 
   /** Shared with [[DerivationTimeout]] - the per-module settings namespace (e.g. `fastShowPrettyDerivation`). */

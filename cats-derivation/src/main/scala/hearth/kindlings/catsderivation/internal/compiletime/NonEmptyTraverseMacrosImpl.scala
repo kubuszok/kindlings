@@ -262,7 +262,7 @@ trait NonEmptyTraverseMacrosImpl
   ): MIO[Expr[Any => List[Any]]] = {
     val lambda = LambdaBuilder.of1[Any]("fa").buildWith { faExpr0 =>
       val faExpr: Expr[F[Any]] = Expr.quote(Expr.splice(faExpr0).asInstanceOf[F[Any]])
-      val fields = caseClass.caseFieldValuesAt(faExpr).toList
+      val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
       val directExprs: List[Expr[Any]] = fields.collect {
         case (fieldName, fieldValue) if directFields.contains(fieldName) =>
           import fieldValue.Underlying as Field
@@ -291,7 +291,7 @@ trait NonEmptyTraverseMacrosImpl
     MIO {
       LambdaBuilder.of2[List[Any], Any]("newVals", "original").buildWith { case (newValsExpr, originalExpr) =>
         val faExpr: Expr[F[Any]] = Expr.quote(Expr.splice(originalExpr).asInstanceOf[F[Any]])
-        val fields = caseClass.caseFieldValuesAt(faExpr).toList
+        val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
         var currentList: Expr[List[Any]] = newValsExpr
         val fieldExprs: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
           import fieldValue.Underlying as Field
@@ -323,7 +323,7 @@ trait NonEmptyTraverseMacrosImpl
       bExpr: Expr[Any],
       fExpr: Expr[(Any, Any) => Any]
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[Any]] = {
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
     val directFieldExprs: List[Expr[Any]] = fields.collect {
       case (fieldName, fieldValue) if directFields.contains(fieldName) =>
         import fieldValue.Underlying as Field
@@ -348,7 +348,7 @@ trait NonEmptyTraverseMacrosImpl
       AnyType: Type[Any],
       EvalAnyType: Type[cats.Eval[Any]]
   ): MIO[Expr[cats.Eval[Any]]] = {
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
     val directFieldExprs: List[Expr[Any]] = fields.collect {
       case (fieldName, fieldValue) if directFields.contains(fieldName) =>
         import fieldValue.Underlying as Field
@@ -368,7 +368,7 @@ trait NonEmptyTraverseMacrosImpl
       fExpr: Expr[Any => Any],
       gExpr: Expr[(Any, Any) => Any]
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[Any]] = {
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
     val directFieldExprs: List[Expr[Any]] = fields.collect {
       case (fieldName, fieldValue) if directFields.contains(fieldName) =>
         import fieldValue.Underlying as Field
@@ -396,7 +396,7 @@ trait NonEmptyTraverseMacrosImpl
       AnyType: Type[Any],
       EvalAnyType: Type[cats.Eval[Any]]
   ): MIO[Expr[cats.Eval[Any]]] = {
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
     val directFieldExprs: List[Expr[Any]] = fields.collect {
       case (fieldName, fieldValue) if directFields.contains(fieldName) =>
         import fieldValue.Underlying as Field

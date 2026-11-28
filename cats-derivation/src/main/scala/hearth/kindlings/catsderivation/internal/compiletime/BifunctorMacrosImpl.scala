@@ -98,7 +98,7 @@ trait BifunctorMacrosImpl
 
     parseCaseClassMIO[F[A, B]]("F[A, B]").parTuple(parseCaseClassMIO[F[C, D]]("F[C, D]")).flatMap {
       case (caseClass, caseClassCD) =>
-        val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+        val fields = allCaseFieldValuesAt(caseClass, fabExpr).toList
 
         val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
           import fieldValue.Underlying as Field
@@ -247,7 +247,7 @@ trait BifunctorMacrosImpl
                       case Left(_) =>
                         MIO.pure(caseValue.upcast[F[Any, Any]])
                       case Right(cc) =>
-                        val fields = cc.caseFieldValuesAt(caseValue).toList
+                        val fields = allCaseFieldValuesAt(cc, caseValue).toList
                         if (fields.isEmpty) {
                           MIO.pure(caseValue.upcast[F[Any, Any]])
                         } else {

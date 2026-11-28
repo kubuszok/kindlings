@@ -161,6 +161,17 @@ generators). Kindlings now completes the constants itself and uses their declara
 constant of the enum somewhere in the module (for example `val _ = AccessMode.values().toList ++ List(AccessMode.READ,
 AccessMode.WRITE, AccessMode.EXECUTE)`). Scala 2.13 is not affected.
 
+## Are `private val` constructor fields of a case class encoded, shown and compared?
+
+Yes, as by the upstream libraries: `case class C(a: Int, private val b: String, c: Boolean)` has `b` in its JSON (circe),
+HOCON (pureconfig, sconfig), YAML, XML and Avro records, in `Show`/`FastShowPretty` output, and in `Eq`/`Order`/`Hash`,
+`Semigroup`/`Monoid`, `Functor`/`Traverse` & co., `Diff`, `Cogen` and `Shrink`; the field has no accessor, so the
+generated code reads it with `productElement`. The exceptions are jsoniter-derivation and ubjson-derivation, which
+follow jsoniter-scala: such a parameter is a compile-time error (`'b' parameter of 'C' should be defined as 'val' or
+'var' in the primary constructor.`). Up to Kindlings 0.4.0 several modules left these fields out (circe,
+pureconfig, sconfig, xml encoders, cats `Show`/`Eq`/`Order`/`Hash`, fast-show-pretty, diff) or failed to derive (cats
+`Semigroup`, `Monoid`, `Functor`, `Traverse`, ...).
+
 ## Which parts of Kindlings end up in my application at runtime? Can I remove the rest from a fat JAR?
 
 Kindlings modules are normal `Compile` dependencies, so all of their code ends up on your runtime classpath and in every

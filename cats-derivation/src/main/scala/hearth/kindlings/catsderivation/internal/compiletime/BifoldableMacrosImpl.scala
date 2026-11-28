@@ -79,7 +79,7 @@ trait BifoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
                   ] =
                 (fabExpr, cExpr, fExpr, gExpr) =>
                   runSafe {
-                    val fields = ccAnyAny.caseFieldValuesAt(fabExpr).toList
+                    val fields = allCaseFieldValuesAt(ccAnyAny, fabExpr).toList
                     var acc = cExpr
                     fields.foreach { case (fieldName, fieldValue) =>
                       import fieldValue.Underlying as Field
@@ -102,7 +102,7 @@ trait BifoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
               ) => Expr[cats.Eval[Any]] =
                 (fabExpr, lcExpr, fExpr, gExpr) =>
                   runSafe {
-                    val fields = ccAnyAny.caseFieldValuesAt(fabExpr).toList
+                    val fields = allCaseFieldValuesAt(ccAnyAny, fabExpr).toList
                     val directFieldExprs: List[(String, Expr[Any])] = fields.collect {
                       case (fieldName, fieldValue)
                           if leftFieldSet.contains(fieldName) || rightFieldSet.contains(fieldName) =>
@@ -242,7 +242,7 @@ trait BifoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
                     CaseClass.parse[CT].toEither match {
                       case Left(_)   => MIO.pure(cExpr)
                       case Right(cc) =>
-                        val fields = cc.caseFieldValuesAt(caseValue).toList
+                        val fields = allCaseFieldValuesAt(cc, caseValue).toList
                         var acc = cExpr
                         fields.foreach { case (fn, fv) =>
                           import fv.Underlying as Field
@@ -278,7 +278,7 @@ trait BifoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
                     CaseClass.parse[CT].toEither match {
                       case Left(_)   => MIO.pure(lcExpr)
                       case Right(cc) =>
-                        val fields = cc.caseFieldValuesAt(caseValue).toList
+                        val fields = allCaseFieldValuesAt(cc, caseValue).toList
                         val covariant: List[(Expr[Any], Boolean)] = fields.collect {
                           case (fn, fv) if info.leftFields.contains(fn) =>
                             import fv.Underlying as Field

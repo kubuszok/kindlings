@@ -43,7 +43,7 @@ trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl &
         Types.SensitiveData
       val paramsByName: Map[String, Parameter] = caseClass.primaryConstructor.totalParameters.flatten.toMap
 
-      NonEmptyList.fromList(caseClass.caseFieldValuesAt(ctx.value).toList) match {
+      NonEmptyList.fromList(allCaseFieldValuesAt(caseClass, ctx.value).toList) match {
         case Some(fieldValues) =>
           fieldValues
             .parTraverse { case (fieldName, fieldValue) =>
