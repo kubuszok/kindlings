@@ -23,9 +23,15 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
     /** scala-yaml's `YamlDecoder.forMap` is not used for a map: Kindlings derives maps itself, so that keys go through
       * their key codecs (`YamlKeyDecoder`) instead of scala-yaml's `YamlDecoder[K]` (a user-provided instance for the
       * whole map type is still used).
+      *
+      * Nor are its `forList`/`forSeq`/`forSet`: the derived collection decoding reports the same failure (the first
+      * failing item, or scala-yaml's failure for a node that is not a sequence), but stops at it instead of decoding
+      * every item first (and with `YamlConfig.withAccumulatingErrors` reports every failing item with its index).
       */
     lazy val ignoredImplicitsAndScalaYamlMaps: Seq[UntypedMethod] =
-      ignoredImplicits ++ Type.of[org.virtuslab.yaml.YamlDecoder.type].unsortedMethodsNamed("forMap").map(_.asUntyped)
+      ignoredImplicits ++ List("forMap", "forList", "forSeq", "forSet").flatMap { name =>
+        Type.of[org.virtuslab.yaml.YamlDecoder.type].unsortedMethodsNamed(name).map(_.asUntyped)
+      }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
       Log.info(s"Attempting to use implicit YamlDecoder for ${Type[A].prettyPrint}") >> {

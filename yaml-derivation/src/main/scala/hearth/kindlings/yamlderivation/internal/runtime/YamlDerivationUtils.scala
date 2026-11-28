@@ -241,7 +241,73 @@ object YamlDerivationUtils {
     if (isNullNode(node)) Right(None)
     else decode(node).map(Some(_))
 
-  class CollectionBuildException(val error: ConstructError) extends RuntimeException("yaml collection decoding error")
+  // no stack trace: it only carries the failure out of a collection's builder (thrown on every failing decode)
+  class CollectionBuildException(val error: ConstructError)
+      extends RuntimeException("yaml collection decoding error", null, false, false)
+
+  // --- Accumulating errors (`YamlConfig.withAccumulatingErrors`) ---
+
+  /** The failures of a decoding that accumulates errors, each with its path. The generated code starts with `null` (no
+    * failure yet: nothing is allocated while every value decodes) and creates one at the first failure.
+    */
+  final class FailureAccumulator {
+    private val failures = List.newBuilder[hearth.kindlings.yamlderivation.YamlDecodingFailure]
+
+    /** Records `error` at `path`; the failures accumulated by a nested decoder are recorded under `path`. */
+    def add(path: String, error: ConstructError): FailureAccumulator = {
+      error.getCause match {
+        case nested: hearth.kindlings.yamlderivation.YamlDecodingFailures =>
+          nested.failures.foreach(failure => failures += failure.copy(path = path + failure.path))
+        case _ =>
+          failures += hearth.kindlings.yamlderivation.YamlDecodingFailure(path, error)
+      }
+      this
+    }
+
+    /** One `ConstructError` listing all the failures. */
+    def toError: ConstructError = hearth.kindlings.yamlderivation.YamlDecodingFailures.aggregate(failures.result())
+  }
+
+  /** A case class field's result recorded under `.fieldName` when it failed (`failures`: `null` when none so far). */
+  def addFieldFailure(
+      failures: FailureAccumulator,
+      fieldName: String,
+      result: Either[ConstructError, Any]
+  ): FailureAccumulator =
+    result match {
+      case Left(error) => (if (failures == null) new FailureAccumulator else failures).add("." + fieldName, error)
+      case _           => failures
+    }
+
+  /** A collection item's failure recorded under `[index]` (`failures`: `null` when none so far). */
+  def addItemFailure(failures: FailureAccumulator, index: Int, error: ConstructError): FailureAccumulator =
+    (if (failures == null) new FailureAccumulator else failures).add("[" + index + "]", error)
+
+  /** The failures of a map entry's key and value recorded under `.key` (`failures`: `null` when none so far). */
+  def addEntryFailures(
+      failures: FailureAccumulator,
+      keyNode: Node,
+      keyResult: Either[ConstructError, Any],
+      valueResult: Either[ConstructError, Any]
+  ): FailureAccumulator = {
+    val result = if (failures == null) new FailureAccumulator else failures
+    val path = keyNode match {
+      case ScalarNode(key, _) => "." + key
+      case other              => "[" + nodeToYaml(other).trim.replace('\n', ' ') + "]"
+    }
+    keyResult match {
+      case Left(error) => val _ = result.add(path, error)
+      case _           =>
+    }
+    valueResult match {
+      case Left(error) => val _ = result.add(path, error)
+      case _           =>
+    }
+    result
+  }
+
+  /** The result of a decoding that accumulated `failures` (not `null`). */
+  def accumulatedFailures[A](failures: FailureAccumulator): Either[ConstructError, A] = Left(failures.toError)
 
   /** The failure of scala-yaml's `YamlDecoder { case ... }` instances (its collections, maps and scalars) for a node
     * they are not defined at: a null, or a node of another kind. `className` is the name of the runtime class of the

@@ -18,6 +18,9 @@ package hearth.kindlings.yamlderivation
   * @param emptyCollectionsAsFlow
   *   `toYamlString` prints empty sequences as `[]` and empty mappings as `{}` (also nested), so that the printed YAML
   *   decodes back (default: off - as scala-yaml's printer, an empty value, which reads back as `null`)
+  *
+  * How decoding failures are reported is set with [[withAccumulatingErrors]] / [[withFailFastErrors]] (see
+  * [[accumulatingErrors]]).
   */
 final case class YamlConfig(
     transformMemberNames: String => String = identity,
@@ -62,6 +65,83 @@ final case class YamlConfig(
 
   /** `toYamlString` prints empty sequences and mappings as an empty value (the default, as scala-yaml's printer). */
   def withoutEmptyCollectionsAsFlow: YamlConfig = copy(emptyCollectionsAsFlow = false)
+
+  // Not a constructor parameter: adding one would change the binary signatures (`apply`, `copy`, `unapply`) that code
+  // compiled against earlier versions links to (the same approach as `AvroConfig.roundingMode`).
+  private var accumulateErrors: Boolean = false
+
+  /** How the derived decoders report failures.
+    *
+    *   - `false` (the default, as scala-yaml): fail fast - decoding stops at the first failure (in field order) and
+    *     returns it as it is; the later fields are not decoded.
+    *   - `true` ([[withAccumulatingErrors]]): every field is decoded (recursively: nested case classes, the items of
+    *     collections, the values and keys of maps) and the result is ONE `ConstructError` listing every failure with
+    *     its path (e.g. `.address.zip`, `.items[2]`); [[YamlDecodingFailures.of]] gives the individual failures.
+    */
+  def accumulatingErrors: Boolean = accumulateErrors
+
+  /** Decode every field and report all the failures in one `ConstructError`, each with its path (see
+    * [[accumulatingErrors]]).
+    */
+  def withAccumulatingErrors: YamlConfig = {
+    val updated = copy()
+    updated.accumulateErrors = true
+    updated
+  }
+
+  /** Stop decoding at the first failure and report only it (the default, as scala-yaml). */
+  def withFailFastErrors: YamlConfig = {
+    val updated = copy()
+    updated.accumulateErrors = false
+    updated
+  }
+
+  def copy(
+      transformMemberNames: String => String = this.transformMemberNames,
+      transformConstructorNames: String => String = this.transformConstructorNames,
+      discriminator: Option[String] = this.discriminator,
+      enumAsStrings: Boolean = this.enumAsStrings,
+      useDefaults: Boolean = this.useDefaults,
+      wrappedSubtypes: Boolean = this.wrappedSubtypes,
+      emptyCollectionsAsFlow: Boolean = this.emptyCollectionsAsFlow
+  ): YamlConfig = {
+    val updated = new YamlConfig(
+      transformMemberNames,
+      transformConstructorNames,
+      discriminator,
+      enumAsStrings,
+      useDefaults,
+      wrappedSubtypes,
+      emptyCollectionsAsFlow
+    )
+    updated.accumulateErrors = accumulateErrors
+    updated
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: YamlConfig =>
+      transformMemberNames == that.transformMemberNames &&
+      transformConstructorNames == that.transformConstructorNames && discriminator == that.discriminator &&
+      enumAsStrings == that.enumAsStrings && useDefaults == that.useDefaults &&
+      wrappedSubtypes == that.wrappedSubtypes && emptyCollectionsAsFlow == that.emptyCollectionsAsFlow &&
+      accumulateErrors == that.accumulateErrors
+    case _ => false
+  }
+  override def hashCode: Int = (
+    transformMemberNames,
+    transformConstructorNames,
+    discriminator,
+    enumAsStrings,
+    useDefaults,
+    wrappedSubtypes,
+    emptyCollectionsAsFlow,
+    accumulateErrors
+  ).hashCode
+  override def toString: String = {
+    val fields = scala.runtime.ScalaRunTime._toString(this)
+    if (!accumulateErrors) fields
+    else s"${fields.dropRight(1)},accumulatingErrors=true)"
+  }
 }
 object YamlConfig {
 

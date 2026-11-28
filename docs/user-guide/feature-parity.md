@@ -1419,6 +1419,7 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 | Single-key wrapper for subtypes | No | Yes (`withWrappedSubtypes`) | Improvement |
 | Constructor defaults for absent fields | Always | On by default (`withoutUseDefaults` turns them off) | Parity |
 | `enumAsStrings` | No (buggy for enums) | Yes | Improvement |
+| Every decoding failure reported (with its path) | No: the first failure only | Opt-in `withAccumulatingErrors` (one `ConstructError` listing all, `YamlDecodingFailures.of` for each); fail fast by default | Improvement (opt-in) |
 
 ### Type classes
 
@@ -1476,6 +1477,7 @@ tuples, `Either`, and map keys (user-provided `String` / `Int` instances in scop
 | Difference | scala-yaml | Kindlings | Status |
 |---|---|---|---|
 | Fields after a failing field | Every field is decoded (and the defaults of absent fields are evaluated), then the first failure is reported | The same failure; later fields are not decoded and their defaults are not evaluated | Design decision (no work after a failure) |
+| Items after a failing collection item | `forList` / `forSeq` / `forSet` decode every item, then report the first failure | The same failure; later items are not decoded (Kindlings decodes `List` / `Seq` / `Set` itself instead of using scala-yaml's instances) | Design decision (no work after a failure) |
 | Instances used for map keys | `forMap` uses the ordinary `YamlDecoder[K]` / `YamlEncoder[K]`, so e.g. a custom `YamlDecoder[String]` also changes `String` keys | Key codecs (`YamlKeyDecoder[K]` / `YamlKeyEncoder[K]`, as circe's `KeyDecoder` and jsoniter-scala's `JsonKeyCodec`); a `YamlDecoder[K]` / `YamlEncoder[K]` is used for keys only when `K` has no key codec (complex keys). Keys are scalars, so a node codec is the wrong abstraction for them, and enum / value type keys get derived codecs | Design decision (since the release after 0.4.0; before, keys used the `YamlDecoder[K]` except `String` keys of maps of derived values) |
 
 The suites also check that the opt-ins differ as intended:
@@ -1486,6 +1488,7 @@ The suites also check that the opt-ins differ as intended:
 | `withWrappedSubtypes` | Subtype written untagged; decoding tries every subtype | Single-key mapping `{ Subtype: { ... } }` |
 | `withDiscriminator(field)` | (as above) | The subtype's name in `field` |
 | `withEmptyCollectionsAsFlow` | `toYamlString`: an empty collection printed as an empty value, which does not decode back | Printed as `[]` / `{}` (also nested), decodes back |
+| `withAccumulatingErrors` | The first failure only | Every field, item and map entry decoded; one `ConstructError` listing every failure with its path (`.field`, `[index]`) |
 
 Kindlings additions without a scala-yaml counterpart: union types are always wrapped; Java enum / `scala.Enumeration`
 values are written as their names.

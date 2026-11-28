@@ -213,6 +213,8 @@ trait DecoderHandleAsMapRuleImpl {
             val buildStep = isMap.build
             val classNameExpr: Expr[String] = Expr(runtimeClassName[A])
 
+            implicit val BuilderT: Type[scala.collection.mutable.Builder[Pair, CtorResult]] =
+              Type.of[scala.collection.mutable.Builder[Pair, CtorResult]]
             def readLoopWith(
                 keyOf: Expr[Node] => Expr[Key]
             ): Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
@@ -236,17 +238,55 @@ trait DecoderHandleAsMapRuleImpl {
               }
               mapBuilder
             }
+            // accumulating: every entry is decoded, the failures of its key and value are recorded under the key
+            def readLoopAccumulatingWith(
+                keyResultOf: Expr[Node] => Expr[Either[ConstructError, Key]]
+            ): Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
+              val mapBuilder = Expr.splice(factoryExpr).newBuilder
+              val decoder = YamlDerivationUtils.decoderFromFn(Expr.splice(decodeFn))
+              val iter = YamlDerivationUtils
+                .mappingEntries(Expr.splice(dctx.node), Expr.splice(classNameExpr))
+                .iterator
+              var failures: YamlDerivationUtils.FailureAccumulator = null
+              while (iter.hasNext) {
+                val entry = iter.next()
+                val keyNode = entry._1
+                val keyResult = Expr.splice(keyResultOf(Expr.quote(keyNode)))
+                val valueResult = decoder.construct(entry._2)(LoadSettings.empty)
+                if (keyResult.isRight && valueResult.isRight) {
+                  val key = keyResult.asInstanceOf[Right[ConstructError, Key]].value
+                  val v = valueResult.asInstanceOf[Right[ConstructError, Value]].value
+                  mapBuilder += Expr.splice(isMap.pair(Expr.quote(key), Expr.quote(v)))
+                } else failures = YamlDerivationUtils.addEntryFailures(failures, keyNode, keyResult, valueResult)
+              }
+              if (failures != null) throw new YamlDerivationUtils.CollectionBuildException(failures.toError)
+              mapBuilder
+            }
+            def byMode(
+                keyOf: Expr[Node] => Expr[Key],
+                keyResultOf: Expr[Node] => Expr[Either[ConstructError, Key]]
+            ): Expr[scala.collection.mutable.Builder[Pair, CtorResult]] =
+              byErrorMode[scala.collection.mutable.Builder[Pair, CtorResult]](
+                readLoopWith(keyOf),
+                readLoopAccumulatingWith(keyResultOf)
+              )
             val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = keyDecodeFn match {
               case None =>
-                readLoopWith(keyNode =>
-                  Expr.quote(YamlDerivationUtils.stringKey(Expr.splice(keyNode)).asInstanceOf[Key])
+                byMode(
+                  keyNode => Expr.quote(YamlDerivationUtils.stringKey(Expr.splice(keyNode)).asInstanceOf[Key]),
+                  keyNode =>
+                    Expr
+                      .quote(YamlDerivationUtils.keyScalar(Expr.splice(keyNode), "java.lang.String"))
+                      .asInstanceOf[Expr[Either[ConstructError, Key]]]
                 )
               case Some(fn) =>
                 ValDefs
                   .createVal[Node => Either[ConstructError, Key]](fn, FreshName.FromPrefix("decodeKey"))
                   .use { decodeKey =>
-                    readLoopWith(keyNode =>
-                      Expr.quote(YamlDerivationUtils.decodeKeyWith(Expr.splice(keyNode), Expr.splice(decodeKey)))
+                    byMode(
+                      keyNode =>
+                        Expr.quote(YamlDerivationUtils.decodeKeyWith(Expr.splice(keyNode), Expr.splice(decodeKey))),
+                      keyNode => Expr.quote(Expr.splice(decodeKey).apply(Expr.splice(keyNode)))
                     )
                   }
             }
