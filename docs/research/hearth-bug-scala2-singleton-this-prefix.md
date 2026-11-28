@@ -1,6 +1,7 @@
 # Hearth bug: `Expr.singletonOf` refers to a case object in a class-nested companion as `Shape.this.Empty` (Scala 2)
 
-**Status:** OPEN (Hearth 0.4.5 and `0.4.5-16-g985e5e6-SNAPSHOT`, Scala 2.13 only). Found 2026-11-19 while adding the
+**Status:** OPEN (Hearth 0.4.5, `0.4.5-16-g985e5e6-SNAPSHOT` and `0.4.5-18-g99ac2ae-SNAPSHOT` - the reproducer below
+re-run on 2026-11-28 still prints `Shape.this.Empty` and fails the same way; Scala 2.13 only). Found 2026-11-19 while adding the
 class-nested shape of `hearth-bug-enum-child-this-type-prefix.md` (the Scala 3 TYPE bug, fixed in 985e5e6) to the
 Kindlings tests. This is the Scala 2 counterpart, but it affects the VALUE reference, not the type.
 

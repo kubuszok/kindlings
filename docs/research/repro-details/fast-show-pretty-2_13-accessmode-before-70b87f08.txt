@@ -1,0 +1,186 @@
+[success] elapsed time: 0 s, cache 0%, 1 onsite task
+[info] [derivationCommons2_13] compiling 17 Scala sources to target/out/jvm/scala-2.13.18/kindlings-derivation-commons/classes ...
+[info] [derivationCommons2_13] done compiling
+[info] [fastShowPretty2_13] compiling 23 Scala sources to target/out/jvm/scala-2.13.18/kindlings-fast-show-pretty/classes ...
+[info] [fastShowPretty2_13] done compiling
+[info] [fastShowPretty2_13] compiling 10 Scala sources to target/out/jvm/scala-2.13.18/kindlings-fast-show-pretty/test-classes ...
+[info] fast-show-pretty/src/test/scala/scratch/ScratchAccessMode.scala:6:68: FastShowPretty.derived:
+[info] ├ Deriving the value java.nio.file.AccessMode for hearth.kindlings.fastshowpretty.FastShowPretty[java.nio.file.AccessMode] at: ScratchAccessMode.scala:6:68:
+[info] │ ├ [Info]  hearth.std.StandardMacroExtension - Successfully loaded 33 extensions:
+[info] │ ├ [Info]  Forward-declaring render helper for java.nio.file.AccessMode
+[info] │ ├ Deriving for type java.nio.file.AccessMode:
+[info] │ │ ├ [Info]  Attempting to use implicit support for java.nio.file.AccessMode
+[info] │ │ ├ [Info]  Attempting to use built-in support for java.nio.file.AccessMode
+[info] │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode as a value type
+[info] │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode as Option
+[info] │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode as a map
+[info] │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode as a collection
+[info] │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode as a named tuple
+[info] │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode as a singleton
+[info] │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode as a case class
+[info] │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode as an enum
+[info] │ │ ├ Deriving the value READ: java.nio.file.AccessMode.READ.type:
+[info] │ │ │ ├ [Info]  Forward-declaring render helper for java.nio.file.AccessMode.READ.type
+[info] │ │ │ ├ Deriving for type java.nio.file.AccessMode.READ.type:
+[info] │ │ │ │ ├ [Info]  Attempting to use implicit support for java.nio.file.AccessMode.READ.type
+[info] │ │ │ │ ├ [Info]  Attempting to use built-in support for java.nio.file.AccessMode.READ.type
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.READ.type as a value type
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.READ.type as Option
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.READ.type as a map
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.READ.type as a collection
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.READ.type as a named tuple
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.READ.type as a singleton
+[info] │ │ │ │ └ [Info]  Derived result for java.nio.file.AccessMode.READ.type: stringbuilder.append("READ").append("()")
+[info] │ │ │ └ [Info]  Defined render helper for java.nio.file.AccessMode.READ.type
+[info] │ │ ├ Deriving the value WRITE: java.nio.file.AccessMode.WRITE.type:
+[info] │ │ │ ├ [Info]  Forward-declaring render helper for java.nio.file.AccessMode.WRITE.type
+[info] │ │ │ ├ Deriving for type java.nio.file.AccessMode.WRITE.type:
+[info] │ │ │ │ ├ [Info]  Attempting to use implicit support for java.nio.file.AccessMode.WRITE.type
+[info] │ │ │ │ ├ [Info]  Attempting to use built-in support for java.nio.file.AccessMode.WRITE.type
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.WRITE.type as a value type
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.WRITE.type as Option
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.WRITE.type as a map
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.WRITE.type as a collection
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.WRITE.type as a named tuple
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.WRITE.type as a singleton
+[info] │ │ │ │ └ [Info]  Derived result for java.nio.file.AccessMode.WRITE.type: stringbuilder.append("WRITE").append("()")
+[info] │ │ │ └ [Info]  Defined render helper for java.nio.file.AccessMode.WRITE.type
+[info] │ │ ├ Deriving the value EXECUTE: java.nio.file.AccessMode.EXECUTE.type:
+[info] │ │ │ ├ [Info]  Forward-declaring render helper for java.nio.file.AccessMode.EXECUTE.type
+[info] │ │ │ ├ Deriving for type java.nio.file.AccessMode.EXECUTE.type:
+[info] │ │ │ │ ├ [Info]  Attempting to use implicit support for java.nio.file.AccessMode.EXECUTE.type
+[info] │ │ │ │ ├ [Info]  Attempting to use built-in support for java.nio.file.AccessMode.EXECUTE.type
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.EXECUTE.type as a value type
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.EXECUTE.type as Option
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.EXECUTE.type as a map
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.EXECUTE.type as a collection
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.EXECUTE.type as a named tuple
+[info] │ │ │ │ ├ [Info]  Attempting to handle java.nio.file.AccessMode.EXECUTE.type as a singleton
+[info] │ │ │ │ └ [Info]  Derived result for java.nio.file.AccessMode.EXECUTE.type: stringbuilder.append("EXECUTE").append("()")
+[info] │ │ │ └ [Info]  Defined render helper for java.nio.file.AccessMode.EXECUTE.type
+[info] │ │ └ [Info]  Derived result for java.nio.file.AccessMode: accessmode match {
+[info] │ │             case (READ @ READ) => {
+[info] │ │               private[this] val _ = (READ: @scala.unchecked) match {
+[info] │ │                 case _ => ()
+[info] │ │               };
+[info] │ │               {
+[info] │ │                 private[this] val _ = ((stringbuilder.append("(") match {
+[info] │ │                   case _ => ()
+[info] │ │                 }): @scala.unchecked) match {
+[info] │ │                   case _ => ()
+[info] │ │                 };
+[info] │ │                 render_READ(stringbuilder, renderconfig, int.+(1), READ).append("): ").append("AccessMode")
+[info] │ │               }
+[info] │ │             }
+[info] │ │             case (WRITE @ WRITE) => {
+[info] │ │               private[this] val _ = (WRITE: @scala.unchecked) match {
+[info] │ │                 case _ => ()
+[info] │ │               };
+[info] │ │               {
+[info] │ │                 private[this] val _ = ((stringbuilder.append("(") match {
+[info] │ │                   case _ => ()
+[info] │ │                 }): @scala.unchecked) match {
+[info] │ │                   case _ => ()
+[info] │ │                 };
+[info] │ │                 render_WRITE(stringbuilder, renderconfig, int.+(1), WRITE).append("): ").append("AccessMode")
+[info] │ │               }
+[info] │ │             }
+[info] │ │             case (EXECUTE @ EXECUTE) => {
+[info] │ │               private[this] val _ = (EXECUTE: @scala.unchecked) match {
+[info] │ │                 case _ => ()
+[info] │ │               };
+[info] │ │               {
+[info] │ │                 private[this] val _ = ((stringbuilder.append("(") match {
+[info] │ │                   case _ => ()
+[info] │ │                 }): @scala.unchecked) match {
+[info] │ │                   case _ => ()
+[info] │ │                 };
+[info] │ │                 render_EXECUTE(stringbuilder, renderconfig, int.+(1), EXECUTE).append("): ").append("AccessMode")
+[info] │ │               }
+[info] │ │             }
+[info] │ │           }
+[info] │ └ [Info]  Defined render helper for java.nio.file.AccessMode
+[info] └ [Info]  Derived final result for: _root_.hearth.kindlings.fastshowpretty.internal.runtime.FastShowPrettyFactories.instance[java.nio.file.AccessMode](((sb: _root_.scala.StringBuilder, config: _root_.hearth.kindlings.fastshowpretty.RenderConfig, level: _root_.scala.Int, value: java.nio.file.AccessMode) => {
+[info]             private[this] val _ = (((sb: @_root_.scala.unchecked) match {
+[info]               case _ => ()
+[info]             }): @scala.unchecked) match {
+[info]               case _ => ()
+[info]             };
+[info]             private[this] val _ = (((config: @_root_.scala.unchecked) match {
+[info]               case _ => ()
+[info]             }): @scala.unchecked) match {
+[info]               case _ => ()
+[info]             };
+[info]             private[this] val _ = (((level: @_root_.scala.unchecked) match {
+[info]               case _ => ()
+[info]             }): @scala.unchecked) match {
+[info]               case _ => ()
+[info]             };
+[info]             private[this] val _ = (((value: @_root_.scala.unchecked) match {
+[info]               case _ => ()
+[info]             }): @scala.unchecked) match {
+[info]               case _ => ()
+[info]             };
+[info]             {
+[info]               def render_AccessMode(stringbuilder: scala.StringBuilder, renderconfig: hearth.kindlings.fastshowpretty.RenderConfig, int: scala.Int, accessmode: java.nio.file.AccessMode): scala.StringBuilder = accessmode match {
+[info]                 case (READ @ READ) => {
+[info]                   private[this] val _ = (READ: @scala.unchecked) match {
+[info]                     case _ => ()
+[info]                   };
+[info]                   {
+[info]                     private[this] val _ = ((stringbuilder.append("(") match {
+[info]                       case _ => ()
+[info]                     }): @scala.unchecked) match {
+[info]                       case _ => ()
+[info]                     };
+[info]                     render_READ(stringbuilder, renderconfig, int.+(1), READ).append("): ").append("AccessMode")
+[info]                   }
+[info]                 }
+[info]                 case (WRITE @ WRITE) => {
+[info]                   private[this] val _ = (WRITE: @scala.unchecked) match {
+[info]                     case _ => ()
+[info]                   };
+[info]                   {
+[info]                     private[this] val _ = ((stringbuilder.append("(") match {
+[info]                       case _ => ()
+[info]                     }): @scala.unchecked) match {
+[info]                       case _ => ()
+[info]                     };
+[info]                     render_WRITE(stringbuilder, renderconfig, int.+(1), WRITE).append("): ").append("AccessMode")
+[info]                   }
+[info]                 }
+[info]                 case (EXECUTE @ EXECUTE) => {
+[info]                   private[this] val _ = (EXECUTE: @scala.unchecked) match {
+[info]                     case _ => ()
+[info]                   };
+[info]                   {
+[info]                     private[this] val _ = ((stringbuilder.append("(") match {
+[info]                       case _ => ()
+[info]                     }): @scala.unchecked) match {
+[info]                       case _ => ()
+[info]                     };
+[info]                     render_EXECUTE(stringbuilder, renderconfig, int.+(1), EXECUTE).append("): ").append("AccessMode")
+[info]                   }
+[info]                 }
+[info]               };
+[info]               def render_READ(stringbuilder: scala.StringBuilder, renderconfig: hearth.kindlings.fastshowpretty.RenderConfig, int: scala.Int, accessmode: java.nio.file.AccessMode.READ.type): scala.StringBuilder = stringbuilder.append("READ").append("()");
+[info]               def render_WRITE(stringbuilder: scala.StringBuilder, renderconfig: hearth.kindlings.fastshowpretty.RenderConfig, int: scala.Int, accessmode: java.nio.file.AccessMode.WRITE.type): scala.StringBuilder = stringbuilder.append("WRITE").append("()");
+[info]               def render_EXECUTE(stringbuilder: scala.StringBuilder, renderconfig: hearth.kindlings.fastshowpretty.RenderConfig, int: scala.Int, accessmode: java.nio.file.AccessMode.EXECUTE.type): scala.StringBuilder = stringbuilder.append("EXECUTE").append("()");
+[info]               render_AccessMode(sb, config, level, value)
+[info]             }
+[info]           }))
+[info]   val inst = hearth.kindlings.fastshowpretty.FastShowPretty.derived[java.nio.file.AccessMode]
+[info]                                                                    ^
+[error] fast-show-pretty/src/test/scala/scratch/ScratchAccessMode.scala:6:68: type mismatch;
+[error]  found   : READ$macro$1.type (with underlying type java.nio.file.AccessMode)
+[error]  required: java.nio.file.AccessMode(READ)
+[error]   val inst = hearth.kindlings.fastshowpretty.FastShowPretty.derived[java.nio.file.AccessMode]
+[error]                                                                    ^
+[error] fast-show-pretty/src/test/scalajvm/hearth/kindlings/fastshowpretty/UnreferencedJavaEnumJvmSpec.scala:15:41: type mismatch;
+[error]  found   : READ$macro$1.type (with underlying type java.nio.file.AccessMode)
+[error]  required: java.nio.file.AccessMode(READ)
+[error]     val rendered = FastShowPretty.render(holder, RenderConfig.Compact)
+[error]                                         ^
+[error] two errors found
+[error] (fastShowPretty2_13 / Test / compileIncremental) Compilation failed
+[error] elapsed time: 16 s, cache 55%, 10 disk cache hits, 8 onsite tasks

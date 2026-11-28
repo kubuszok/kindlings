@@ -1,0 +1,78 @@
+Compiling project (Scala 2.13.18, JVM (22))
+[info] ./usage/Usage.scala:6:11
+[info] Main.this.mode match {
+[info]   case (READ$macro$1 @ READ) => {
+[info]     val x$1 = ((READ$macro$1: @scala.unchecked) match {
+[info]       case _ => ()
+[info]     });
+[info]     READ$macro$1.toString.+(": java.nio.file.AccessMode(READ)")
+[info]   }
+[info]   case (WRITE$macro$1 @ WRITE) => {
+[info]     val x$2 = ((WRITE$macro$1: @scala.unchecked) match {
+[info]       case _ => ()
+[info]     });
+[info]     WRITE$macro$1.toString.+(": java.nio.file.AccessMode(WRITE)")
+[info]   }
+[info]   case (EXECUTE$macro$1 @ EXECUTE) => {
+[info]     val x$3 = ((EXECUTE$macro$1: @scala.unchecked) match {
+[info]       case _ => ()
+[info]     });
+[info]     EXECUTE$macro$1.toString.+(": java.nio.file.AccessMode(EXECUTE)")
+[info]   }
+[info] }
+[info]   println(repro.Repro.asAny(mode))
+[info]           ^^^^^^^^^^^^^^^^^^^^^^^
+[info] ./usage/Usage.scala:7:11
+[info] Main.this.mode match {
+[info]   case (READ$macro$2 @ READ) => {
+[info]     val x$4 = ((READ$macro$2: @scala.unchecked) match {
+[info]       case _ => ()
+[info]     });
+[info]     _root_.scala.Predef.identity[java.nio.file.AccessMode(READ)](READ$macro$2).toString.+(": java.nio.file.AccessMode(READ)")
+[info]   }
+[info]   case (WRITE$macro$2 @ WRITE) => {
+[info]     val x$5 = ((WRITE$macro$2: @scala.unchecked) match {
+[info]       case _ => ()
+[info]     });
+[info]     _root_.scala.Predef.identity[java.nio.file.AccessMode(WRITE)](WRITE$macro$2).toString.+(": java.nio.file.AccessMode(WRITE)")
+[info]   }
+[info]   case (EXECUTE$macro$2 @ EXECUTE) => {
+[info]     val x$6 = ((EXECUTE$macro$2: @scala.unchecked) match {
+[info]       case _ => ()
+[info]     });
+[info]     _root_.scala.Predef.identity[java.nio.file.AccessMode(EXECUTE)](EXECUTE$macro$2).toString.+(": java.nio.file.AccessMode(EXECUTE)")
+[info]   }
+[info] }
+[info]   println(repro.Repro.asChild(mode))
+[info]           ^^^^^^^^^^^^^^^^^^^^^^^^^
+[info] ./usage/Usage.scala:7:11
+[info] Main.this.mode match {
+[info]   case (READ$macro$3 @ READ) => {
+[info]     val x$7 = ((READ$macro$3: @scala.unchecked) match {
+[info]       case _ => ()
+[info]     });
+[info]     _root_.scala.Predef.identity[java.nio.file.AccessMode(READ)](READ$macro$3).toString.+(": java.nio.file.AccessMode(READ)")
+[info]   }
+[info]   case (WRITE$macro$3 @ WRITE) => {
+[info]     val x$8 = ((WRITE$macro$3: @scala.unchecked) match {
+[info]       case _ => ()
+[info]     });
+[info]     _root_.scala.Predef.identity[java.nio.file.AccessMode(WRITE)](WRITE$macro$3).toString.+(": java.nio.file.AccessMode(WRITE)")
+[info]   }
+[info]   case (EXECUTE$macro$3 @ EXECUTE) => {
+[info]     val x$9 = ((EXECUTE$macro$3: @scala.unchecked) match {
+[info]       case _ => ()
+[info]     });
+[info]     _root_.scala.Predef.identity[java.nio.file.AccessMode(EXECUTE)](EXECUTE$macro$3).toString.+(": java.nio.file.AccessMode(EXECUTE)")
+[info]   }
+[info] }
+[info]   println(repro.Repro.asChild(mode))
+[info]           ^^^^^^^^^^^^^^^^^^^^^^^^^
+[error] ./usage/Usage.scala:7:30
+[error] type mismatch;
+[error]  found   : READ$macro$2.type (with underlying type java.nio.file.AccessMode)
+[error]  required: java.nio.file.AccessMode(READ)
+[error]   println(repro.Repro.asChild(mode))
+[error]                              ^
+Error compiling project (Scala 2.13.18, JVM (22))
+Compilation failed

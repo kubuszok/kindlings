@@ -1,0 +1,18 @@
+1. non-inline arg:  semiEval = Right(FLOOR)
+  tree = Inlined(None, Nil, Ident("FLOOR"))
+2. inline arg:      semiEval = Right(FLOOR)
+  tree = Inlined(None, Nil, Ident("FLOOR"))
+3. config-like:     semiEval = Left(Cannot resolve module: java.math.RoundingMode)
+  tree = Inlined(None, Nil, Ident("a$proxy1"))
+3b. config-like inline: semiEval = Left(Cannot resolve module: java.math.RoundingMode)
+  tree = Inlined(None, Nil, Apply(Select(Select(Ident("Cfg"), "default"), "withDecimalConfig"), List(Literal(IntConstant(8)), Literal(IntConstant(2)), Select(Select(Select(Ident("java"), "math"), "RoundingMode"), "HALF_UP"))))
+4. annotation (secondary ctor):
+annotation tree = Apply(Select(New(Inferred()), "<init>"), List(Literal(IntConstant(8)), Literal(IntConstant(2)), Select(Select(Select(Ident("java"), "math"), "RoundingMode"), "FLOOR")))
+  arg 0 tree = Literal(IntConstant(8))
+  arg 1 tree = Literal(IntConstant(2))
+  arg 2 tree = Select(Select(Select(Ident("java"), "math"), "RoundingMode"), "FLOOR")
+  decodedConstructorArguments = Some(List(Right(8), Right(2), Left(Cannot resolve module: java.math.RoundingMode)))
+5. annotation (primary ctor):
+annotation tree = Apply(Select(New(Inferred()), "<init>"), List(Select(Select(Select(Ident("java"), "math"), "RoundingMode"), "FLOOR")))
+  arg 0 tree = Select(Select(Select(Ident("java"), "math"), "RoundingMode"), "FLOOR")
+  decodedConstructorArguments = Some(List(Left(Cannot resolve module: java.math.RoundingMode)))
