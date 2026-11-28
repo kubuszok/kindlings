@@ -15,7 +15,7 @@ trait SchemaHandleAsEnumRuleImpl {
 
     def apply[A: SchemaCtx]: MIO[Rule.Applicability[Expr[Schema[A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as enum") >> {
-        Enum.parse[A].toEither match {
+        parseEnum[A].toEither match {
           case Right(e) =>
             Log.info(s"Deriving Schema for enum/sealed ${Type[A].prettyPrint}") >>
               sctx.inProgress.get.flatMap { inProgressSet =>

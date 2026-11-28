@@ -11,7 +11,7 @@ trait HashEnumRuleImpl {
   object HashEnumRule extends HashDerivationRule("Hash as enum") {
 
     def apply[A: HashCtx]: MIO[Rule.Applicability[Expr[Int]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumm) =>
           implicit val IntType: Type[Int] = HashTypes.Int
           val defBuilder = ValDefBuilder.ofDef1[A, Int](s"hash_${Type[A].shortName}")

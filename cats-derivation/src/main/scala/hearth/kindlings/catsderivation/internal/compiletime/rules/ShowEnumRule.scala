@@ -12,7 +12,7 @@ trait ShowEnumRuleImpl {
 
     def apply[A: ShowCtx]: MIO[Rule.Applicability[Expr[String]]] =
       Log.info(s"Checking enum for Show[${Type[A].prettyPrint}]") >> {
-        Enum.parse[A].toEither match {
+        parseEnum[A].toEither match {
           case Right(enumm) =>
             implicit val SensitiveDataType: Type[hearth.kindlings.catsderivation.annotations.sensitiveData] =
               ShowTypes.SensitiveData

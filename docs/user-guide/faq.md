@@ -149,6 +149,18 @@ decoder or codec for a sealed trait declared inside a **class** whose case objec
 hierarchy at the top level or inside an `object` (e.g. the suite's companion object), or put the case object next to
 the trait instead of in its companion.
 
+## Why does Scala 3 say that a JDK enum "is not sealed, not an enumeration, and not a union type"?
+
+A Scala 3 compiler/Hearth limitation, worked around by every Kindlings derivation module after Kindlings 0.4.0: the
+compiler only knows the constants of a Java enum read from a class file (any JDK enum such as
+`java.util.concurrent.TimeUnit` or `java.nio.file.AccessMode`, or a Java enum from a dependency) once code in the same
+compilation refers to one of them. A `case class Config(mode: AccessMode)` codec in a module that never writes
+`AccessMode.READ` then failed with this message; once a constant was referred to, the constants came in a different
+order (the referred ones first), which changed the order-dependent outputs (cats `Order`, tapir enumerations,
+generators). Kindlings now completes the constants itself and uses their declaration order. On 0.4.0, refer to every
+constant of the enum somewhere in the module (for example `val _ = AccessMode.values().toList ++ List(AccessMode.READ,
+AccessMode.WRITE, AccessMode.EXECUTE)`). Scala 2.13 is not affected.
+
 ## Which parts of Kindlings end up in my application at runtime? Can I remove the rest from a fat JAR?
 
 Kindlings modules are normal `Compile` dependencies, so all of their code ends up on your runtime classpath and in every

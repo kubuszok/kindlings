@@ -27,7 +27,7 @@ trait EnumAlgebraSupport { this: InvariantKMacrosImpl & MacroCommons & StdExtens
     val AlgW1: Type[Alg[CatsTaglessFactories.WCtor1]] = algCtorK1.apply[CatsTaglessFactories.WCtor1](using mkWCtor1)
     implicit val AlgW2: Type[Alg[CatsTaglessFactories.WCtor2]] =
       algCtorK1.apply[CatsTaglessFactories.WCtor2](using mkWCtor2)
-    parsedOrFail(Enum.parse(using AlgW1).toEither, "Alg[WCtor1]").flatMap { enumm =>
+    parsedOrFail(parseEnum(using AlgW1).toEither, "Alg[WCtor1]").flatMap { enumm =>
       enumm
         .matchOn[MIO, Alg[CatsTaglessFactories.WCtor2]](afExpr.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor1]]]) {
           matched =>
@@ -59,7 +59,7 @@ trait EnumAlgebraSupport { this: InvariantKMacrosImpl & MacroCommons & StdExtens
   protected def isEnumAlgebra[Alg[_[_]]](algCtorK1: Type.CtorK1[Alg]): Either[String, Unit] = {
     val AlgW1 = algCtorK1.apply[CatsTaglessFactories.WCtor1](using mkWCtor1)
     if (CaseClass.parse(using AlgW1).toEither.isRight) Left(s"${AlgW1.prettyPrint} is a case class")
-    else Enum.parse(using AlgW1).toEither.map(_ => ()).left.map(_.toString)
+    else parseEnum(using AlgW1).toEither.map(_ => ()).left.map(_.toString)
   }
 }
 

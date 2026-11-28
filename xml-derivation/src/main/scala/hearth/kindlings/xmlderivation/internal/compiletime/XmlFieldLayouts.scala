@@ -20,7 +20,8 @@ import hearth.kindlings.derivation.compiletime.StableChildrenOrder
   * elements, inside a wrapper element) and the subtypes of a sealed hierarchy, decided once for the encoder and the
   * decoder, so that the decoder reads what the encoder writes.
   */
-trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions & AnnotationSupport =>
+trait XmlFieldLayouts extends XmlTextValues with hearth.kindlings.derivation.compiletime.JavaEnumSupport {
+  this: MacroCommons & StdExtensions & AnnotationSupport =>
 
   // --- Subtypes of sealed traits / enums ---
 
@@ -62,7 +63,7 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
     */
   def isNestedXmlSum[C: Type](hasUserInstance: ?? => Boolean): Boolean =
     SingletonValue.unapply(Type[C]).isEmpty && !Type[C].isJavaEnum && !Type[C].isEnumeration &&
-      Enum.parse[C].toOption.isDefined && !hasUserInstance(Type[C].as_??)
+      parseEnum[C].toOption.isDefined && !hasUserInstance(Type[C].as_??)
 
   /** The leaves of a sealed hierarchy, in the build-independent order: nested sealed subtypes are flattened (their
     * leaves are written with their own names), unless they have a user-provided instance.
@@ -73,7 +74,7 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
       StableChildrenOrder.directChildren(XmlFieldLayouts.this)(enumB).flatMap { case (name, child) =>
         import child.Underlying as C
         val nested: Option[Enum[C]] =
-          if (depth < 32 && isNestedXmlSum[C](hasUserInstance)) Enum.parse[C].toOption else None
+          if (depth < 32 && isNestedXmlSum[C](hasUserInstance)) parseEnum[C].toOption else None
         nested match {
           case Some(enumC) => leaves[C](enumC, depth + 1)
           case None        => List(XmlSubtype(name, getTypeAnnotationStringArg[xmlName, C], Type[C].as_??))
@@ -89,7 +90,7 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
     implicit val A: Type[A] = tpe
     if (isXmlTextValue(tpe) || SingletonValue.unapply(tpe).isDefined) None
     else
-      Enum.parse[A].toOption.flatMap { enumm =>
+      parseEnum[A].toOption.flatMap { enumm =>
         val subtypes = xmlSubtypesOf[A](enumm)(hasUserInstance)
         val allSingletons = Type[A].isJavaEnum || Type[A].isEnumeration || subtypes.forall { subtype =>
           SingletonValue.unapply(subtype.tpe.Underlying).isDefined

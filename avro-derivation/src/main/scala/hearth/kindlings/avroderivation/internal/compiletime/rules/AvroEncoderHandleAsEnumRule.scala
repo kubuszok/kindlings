@@ -15,7 +15,7 @@ trait AvroEncoderHandleAsEnumRuleImpl {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Any]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A].toEither match {
+        parseEnum[A].toEither match {
           case Right(enumm) =>
             encodeEnumCases[A](enumm).map(Rule.matched)
           case Left(reason) =>

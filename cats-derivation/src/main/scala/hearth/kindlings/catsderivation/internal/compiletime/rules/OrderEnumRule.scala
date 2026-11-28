@@ -11,7 +11,7 @@ trait OrderEnumRuleImpl {
 
   object OrderEnumRule extends OrderDerivationRule("Order as enum") {
     def apply[A: OrderCtx]: MIO[Rule.Applicability[Expr[Int]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumm) =>
           implicit val IntType: Type[Int] = OrderTypes.Int
           val defBuilder = ValDefBuilder.ofDef2[A, A, Int](s"compare_${Type[A].shortName}")

@@ -314,10 +314,10 @@ trait ErasedBiSupport
       val whole: ?? = lam.any.as_??
       import whole.Underlying as T
       (
-        Enum.parse[T].toOption,
-        Enum.parse(using lam.ii).toOption,
-        Enum.parse(using lam.si).toOption,
-        Enum.parse(using lam.is).toOption
+        parseEnum[T].toOption,
+        parseEnum(using lam.ii).toOption,
+        parseEnum(using lam.si).toOption,
+        parseEnum(using lam.is).toOption
       ) match {
         case (Some(enumAny), Some(enumII), Some(enumSI), Some(enumIS)) =>
           val childrenAny = enumAny.directChildren.toList
@@ -472,7 +472,7 @@ trait ErasedBiSupport
       }
     if (CaseClass.parse(using lam.any).toOption.isDefined) fieldsDirect(lam.ii, lam.si, lam.is)
     else
-      (Enum.parse(using lam.ii).toOption, Enum.parse(using lam.si).toOption, Enum.parse(using lam.is).toOption) match {
+      (parseEnum(using lam.ii).toOption, parseEnum(using lam.si).toOption, parseEnum(using lam.is).toOption) match {
         case (Some(eII), Some(eSI), Some(eIS)) =>
           val cII = eII.directChildren.toList
           val cSI = eSI.directChildren.toList

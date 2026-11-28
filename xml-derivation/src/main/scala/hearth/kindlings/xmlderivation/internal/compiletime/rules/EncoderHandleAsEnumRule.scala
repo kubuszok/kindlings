@@ -17,7 +17,7 @@ trait EncoderHandleAsEnumRuleImpl {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[scala.xml.Elem]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a sealed trait/enum") >> {
-        Enum.parse[A].toEither match {
+        parseEnum[A].toEither match {
           case Right(parsedEnum) =>
             deriveEnumEncoder[A](parsedEnum)
           case Left(reason) =>
@@ -153,7 +153,7 @@ trait EncoderHandleAsEnumRuleImpl {
         import matched.{value as enumCaseValue, Underlying as EnumCase}
         Log.namedScope(s"Encoding enum case ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
           val nested: Option[Enum[EnumCase]] =
-            if (!isValueEnum[B] && isNestedXmlSum[EnumCase](hasUserEncoder[A])) Enum.parse[EnumCase].toOption
+            if (!isValueEnum[B] && isNestedXmlSum[EnumCase](hasUserEncoder[A])) parseEnum[EnumCase].toOption
             else None
           nested match {
             case Some(nestedEnum) =>
@@ -207,7 +207,7 @@ trait EncoderHandleAsEnumRuleImpl {
       ectx.getEnumNameHelper[A].flatMap {
         case Some(helper) => MIO.pure(helper)
         case None         =>
-          Enum.parse[A].toEither match {
+          parseEnum[A].toEither match {
             case Left(reason) =>
               MIO.fail(EncoderDerivationError.UnsupportedType(Type[A].prettyPrint, List(reason)))
             case Right(enumType) =>
@@ -231,7 +231,7 @@ trait EncoderHandleAsEnumRuleImpl {
         .parMatchOn[MIO, String](value) { matched =>
           import matched.{value as enumCaseValue, Underlying as EnumCase}
           val nested: Option[Enum[EnumCase]] =
-            if (!isValueEnum[B] && isNestedXmlSum[EnumCase](hasUserEncoder[A])) Enum.parse[EnumCase].toOption
+            if (!isValueEnum[B] && isNestedXmlSum[EnumCase](hasUserEncoder[A])) parseEnum[EnumCase].toOption
             else None
           nested match {
             case Some(nestedEnum) => caseNameOf[A, EnumCase](nestedEnum, enumCaseValue, config, subtypes)

@@ -15,7 +15,7 @@ trait EncoderHandleAsEnumRuleImpl {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Json]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A].toEither match {
+        parseEnum[A].toEither match {
           case Right(enumm) =>
             encodeEnumCases[A](enumm).map(Rule.matched)
           case Left(reason) =>
@@ -132,7 +132,7 @@ trait EncoderHandleAsEnumRuleImpl {
                 if (
                   flattensNestedSums[A] && isNestedSum[EnumCase] && entryFor[EnumCase](entries)
                     .forall { case (_, entry) => !(entry.Underlying =:= Type[EnumCase]) }
-                ) Enum.parse[EnumCase].toOption
+                ) parseEnum[EnumCase].toOption
                 else None
               nestedSum match {
                 case Some(nested) =>

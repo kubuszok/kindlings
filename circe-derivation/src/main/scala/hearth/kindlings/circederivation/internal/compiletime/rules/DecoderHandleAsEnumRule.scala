@@ -18,7 +18,7 @@ trait DecoderHandleAsEnumRuleImpl {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A].toEither match {
+        parseEnum[A].toEither match {
           case Right(enumm) =>
             for {
               _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
