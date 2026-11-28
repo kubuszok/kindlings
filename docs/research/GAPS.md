@@ -71,7 +71,7 @@ more module/wrapper combinations.
 | jsoniter | `decodingOnly + encodingOnly compile error` in `compileErrors()` context | Works in real usage. |
 | tapir | Scala 2 tapir-schema tests broken | Pre-existing Hearth issue with Scala 2 type identity. |
 | di-cats | No Hearth `Ctor` for mixed kinds (`Resource[F[_], A]`) — item 11 of the 2026-10 Hearth feedback | Open in Hearth (no ETA); `isResource`/`resourceUnderlying` recognise `Resource` by FQCN + `decompose2`. |
-| circe | Scala 3: `semiEval` cannot evaluate the default arguments of the `KindlingsEncoder`/`KindlingsDecoder`/`KindlingsCodecAsObject` companions (their inline accessors take a package parameter, so `getMethods` throws `NoClassDefFoundError`, now a `Left`); lazy local vals (`given`) are skipped by design | Named-argument `derive(...)` configurations are runtime ones and `deriveEnum` stays an overload; `SemiEvalConfigScala3` follows lazy local vals — see `hearth-gap-semieval-named-args.md`. |
+| circe | Scala 3: `semiEval` cannot evaluate the default arguments of the `KindlingsEncoder`/`KindlingsDecoder`/`KindlingsCodecAsObject` companions (their inline accessors take a package parameter, so `getMethods` throws `NoClassDefFoundError`, now a `Left`); lazy local vals (`given`) are skipped by design | Named-argument `derive(...)` configurations are runtime ones and `deriveEnum` stays an overload; `SemiEvalConfigScala3` follows a lazy local val (e.g. a local `given Configuration = ...`) to its right-hand side, which Hearth skips by design (it may refer to itself). |
 
 Resolved items (Hearth fixes and the Kindlings workarounds they made unnecessary) are in the git history of this
 file and of `docs/research/`.

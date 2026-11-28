@@ -304,7 +304,7 @@ its `fieldNameMapper` gives are computed once per codec instance, on first use, 
 result never depends on the incremental-compilation state, members of classes/objects of the module being compiled are
 not evaluated by reflection: on Scala 3 their `val`s are followed to their right-hand side, on Scala 2 such configs are
 always treated as runtime configs, whether their classes are compiled in the same run or by an earlier incremental run
-(see `docs/research/hearth-gap-semieval-local-vals-and-vars.md`).
+(a Scala 2 macro cannot see the right-hand side of a `val`).
 
 ## Other notes
 

@@ -292,6 +292,18 @@ Field indices are known at compile time from the schema/type structure. This eli
 
 ---
 
+## 12. Keep generated methods small and linear in the number of fields
+
+These are the lessons of the 0.4.0 regressions: #308, "Method too large" at 88 defaulted Avro fields, fixed in #311 and #313.
+
+- **No `try`/`if`/`match` inside argument lists.** A `try` in an argument list makes the compiler spill every argument evaluated before it. Branches nested in expressions need stack-map frames listing every live local. Both grow quadratically with the number of fields. Bind each field's result with a statement, or decode it in its own local `def`, then pass plain values to the constructor or builder.
+- **Per-field local defs and flat statements**, never one nesting level per field. Each field costs a fixed number of statements. Reference: `derivation-commons` `FlatFieldsConstruct`, for both fail-fast and accumulating decoding.
+- **Branch in the macro on what it knows** (`evaluatedConfig`, annotations, type shape). Emit a runtime `if (config.x)` only on the path where the config cannot be evaluated.
+- **Per-instance caching:** build schemas, tables, alias and expected-key sets, regexes and summoned instances once per instance (see #9, #10), never per call. No local `lazy val`s in per-call code.
+- **Size guard:** the `*BytecodeSizeSpec` of each module derives a 100-field fixture, reads the class files and fails when a method exceeds 8000 B. It covers both the compile-time and the runtime config where both exist. Keep it green and extend it when you touch a module. Benchmark wide types and the runtime-config path too, not only small models.
+
+---
+
 ## Verification checklist
 
 After applying these optimizations to a module:
