@@ -17,6 +17,9 @@ trait UserInstancesPlatform { this: MacroCommons =>
   ): Either[(String, Boolean), Expr[Inst]] =
     Type[Inst].summonExprIgnoring(ignored*).toEither.left.map(reason => (reason, false))
 
+  /** Whether `A` is a Scala 3 generic tuple (never on Scala 2). */
+  protected def isGenericTupleType[A: Type]: Boolean = false
+
   /** Whether `tpe` is a proper type (not a type constructor), so that it can have a type class instance. */
   protected def isProperType(tpe: ??): Boolean = {
     import tpe.Underlying as T
