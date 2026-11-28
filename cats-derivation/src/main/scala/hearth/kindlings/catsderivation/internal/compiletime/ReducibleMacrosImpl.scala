@@ -102,7 +102,7 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
             val doReduceLeftTo: (Expr[F[Any]], Expr[Any => Any], Expr[(Any, Any) => Any]) => Expr[Any] =
               (faExpr, fExpr, gExpr) =>
                 runSafe {
-                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                  val fields = allCaseFieldValuesAt(ccAny, faExpr).toList
                   val directFieldExprs: List[Expr[Any]] = fields.collect {
                     case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
                       import fieldValue.Underlying as Field
@@ -123,7 +123,7 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
                 ] =
               (faExpr, fExpr, gExpr) =>
                 runSafe {
-                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                  val fields = allCaseFieldValuesAt(ccAny, faExpr).toList
                   val directFieldExprs: List[Expr[Any]] = fields.collect {
                     case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
                       import fieldValue.Underlying as Field
@@ -142,7 +142,7 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
             val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
               (faExpr, bExpr, fExpr) =>
                 runSafe {
-                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                  val fields = allCaseFieldValuesAt(ccAny, faExpr).toList
                   val directFieldExprs: List[Expr[Any]] = fields.collect {
                     case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
                       import fieldValue.Underlying as Field
@@ -160,7 +160,7 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
                 ] =
               (faExpr, lbExpr, fExpr) =>
                 runSafe {
-                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                  val fields = allCaseFieldValuesAt(ccAny, faExpr).toList
                   val directFieldExprs: List[Expr[Any]] = fields.collect {
                     case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
                       import fieldValue.Underlying as Field

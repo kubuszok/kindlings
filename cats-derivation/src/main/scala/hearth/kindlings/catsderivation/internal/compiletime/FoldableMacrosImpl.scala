@@ -143,7 +143,7 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
               val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
                 (faExpr, bExpr, fExpr) =>
                   runSafe {
-                    val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                    val fields = allCaseFieldValuesAt(ccAny, faExpr).toList
                     var result: Expr[Any] = bExpr
                     fields.foreach { case (fieldName, fieldValue) =>
                       import fieldValue.Underlying as Field
@@ -172,7 +172,7 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                   ] =
                 (faExpr, lbExpr, fExpr) =>
                   runSafe {
-                    val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                    val fields = allCaseFieldValuesAt(ccAny, faExpr).toList
                     val foldableFields: List[(String, Expr[Any], Option[Expr[Any]])] = fields.collect {
                       case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
                         import fieldValue.Underlying as Field
@@ -377,7 +377,7 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                     CaseClass.parse[CT].toEither match {
                       case Left(_)   => MIO.pure(bExpr)
                       case Right(cc) =>
-                        val fields = cc.caseFieldValuesAt(caseValue).toList
+                        val fields = allCaseFieldValuesAt(cc, caseValue).toList
                         var result: Expr[Any] = bExpr
                         fields
                           .traverse { case (fn, fv) =>
@@ -435,7 +435,7 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                     CaseClass.parse[CT].toEither match {
                       case Left(_)   => MIO.pure(lbExpr)
                       case Right(cc) =>
-                        val fields = cc.caseFieldValuesAt(caseValue).toList
+                        val fields = allCaseFieldValuesAt(cc, caseValue).toList
                         val foldableMIO: MIO[List[Option[(String, Expr[Any], Option[Expr[Any]])]]] =
                           fields.traverse { case (fn, fv) =>
                             import fv.Underlying as Field

@@ -155,7 +155,7 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
     implicit val FBType: Type[F[B]] = FCtor.apply[B]
 
     parseCaseClassMIO[F[A]]("F[A]").parTuple(parseCaseClassMIO[F[B]]("F[B]")).flatMap { case (caseClass, caseClassB) =>
-      val fields = caseClass.caseFieldValuesAt(faExpr).toList
+      val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
 
       val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
         import fieldValue.Underlying as Field
@@ -181,8 +181,8 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
       ffExpr: Expr[F[Any]],
       faExpr: Expr[F[Any]]
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
-    val fieldsFF = caseClass.caseFieldValuesAt(ffExpr).toList
-    val fieldsFA = caseClass.caseFieldValuesAt(faExpr).toList
+    val fieldsFF = allCaseFieldValuesAt(caseClass, ffExpr).toList
+    val fieldsFA = allCaseFieldValuesAt(caseClass, faExpr).toList
 
     val apFieldsMIO: MIO[List[(String, Expr_??)]] =
       fieldsFF.zip(fieldsFA).traverse { case ((fieldName, ffFieldValue), (_, faFieldValue)) =>

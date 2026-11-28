@@ -223,8 +223,8 @@ trait PartialOrderMacrosImpl extends StrictDerivationSupport with InstanceScopeS
         y: Expr[A]
     ): MIO[Expr[Double]] = {
       implicit val DoubleType: Type[Double] = PartialOrderTypes.Double
-      val fieldsX = caseClass.caseFieldValuesAt(x).toList
-      val fieldsY = caseClass.caseFieldValuesAt(y).toList
+      val fieldsX = allCaseFieldValuesAt(caseClass, x).toList
+      val fieldsY = allCaseFieldValuesAt(caseClass, y).toList
       NonEmptyList.fromList(fieldsX.zip(fieldsY)) match {
         case Some(fieldPairs) =>
           fieldPairs

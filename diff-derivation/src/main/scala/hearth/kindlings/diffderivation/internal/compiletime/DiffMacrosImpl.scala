@@ -269,7 +269,7 @@ trait DiffMacrosImpl
         value: Expr[A]
     ): MIO[Expr[DiffResult]] = {
       implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
-      val fields = caseClass.caseFieldValuesAt(value, AtCallSite).toList
+      val fields = allCaseFieldValuesAt(caseClass, value).toList
       val pn = Expr(Type.plainPrint[A])
       val fn = Expr(Type.plainPrint[A])
       val sn = Expr(Type.shortName[A])

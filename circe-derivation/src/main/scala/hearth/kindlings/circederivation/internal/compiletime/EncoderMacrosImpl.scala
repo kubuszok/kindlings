@@ -180,8 +180,7 @@ trait EncoderMacrosImpl
     implicit val KindlingsEncoderA: Type[KindlingsEncoder[A]] = Types.KindlingsEncoder[A]
     implicit val ConfigT: Type[Configuration] = Types.Configuration
     def fieldOf(a: Expr[A]): Expr[Field] =
-      caseClass
-        .caseFieldValuesAt(a)
+      allCaseFieldValuesAt(caseClass, a)
         .collectFirst { case (name, v) if name == fieldName => v.value.asInstanceOf[Expr[Field]] }
         .getOrElse(Environment.reportErrorAndAbort(s"Cannot access field $fieldName"))
     deriveEncoderInstanceForEntrypoint[Field, KindlingsEncoder[A]](

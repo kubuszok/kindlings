@@ -110,7 +110,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
                 val doBimap: (Expr[F[Any, Any]], Expr[Any => Any], Expr[Any => Any]) => Expr[F[Any, Any]] =
                   (fabExpr, fExpr, gExpr) =>
                     runSafe {
-                      val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+                      val fields = allCaseFieldValuesAt(caseClass, fabExpr).toList
                       val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
                         import fieldValue.Underlying as Field
                         if (leftFieldSet.contains(fieldName)) {
@@ -132,7 +132,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
                     : (Expr[F[Any, Any]], Expr[Any], Expr[(Any, Any) => Any], Expr[(Any, Any) => Any]) => Expr[Any] =
                   (fabExpr, cExpr, fExpr, gExpr) =>
                     runSafe {
-                      val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+                      val fields = allCaseFieldValuesAt(caseClass, fabExpr).toList
                       var acc = cExpr
                       fields.foreach { case (fieldName, fieldValue) =>
                         import fieldValue.Underlying as Field
@@ -153,7 +153,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
                 ) => Expr[cats.Eval[Any]] =
                   (fabExpr, lcExpr, fExpr, gExpr) =>
                     runSafe {
-                      val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+                      val fields = allCaseFieldValuesAt(caseClass, fabExpr).toList
                       val directFieldExprs: List[(String, Expr[Any])] = fields.collect {
                         case (fieldName, fieldValue)
                             if leftFieldSet.contains(fieldName) || rightFieldSet.contains(fieldName) =>
@@ -305,7 +305,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
   ): MIO[Expr[Any => List[Any]]] = {
     val lambda = LambdaBuilder.of1[Any]("fab").buildWith { fabExpr0 =>
       val fabExpr: Expr[F[Any, Any]] = Expr.quote(Expr.splice(fabExpr0).asInstanceOf[F[Any, Any]])
-      val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+      val fields = allCaseFieldValuesAt(caseClass, fabExpr).toList
       val directExprs: List[Expr[Any]] = fields.collect {
         case (fieldName, fieldValue) if covariantFields.contains(fieldName) =>
           import fieldValue.Underlying as Field
@@ -334,7 +334,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
     MIO {
       LambdaBuilder.of2[List[Any], Any]("newVals", "original").buildWith { case (newValsExpr, originalExpr) =>
         val fabExpr: Expr[F[Any, Any]] = Expr.quote(Expr.splice(originalExpr).asInstanceOf[F[Any, Any]])
-        val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+        val fields = allCaseFieldValuesAt(caseClass, fabExpr).toList
         var currentList: Expr[List[Any]] = newValsExpr
         val fieldExprs: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
           import fieldValue.Underlying as Field
@@ -421,7 +421,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
                 CaseClass.parse[CT].toEither match {
                   case Left(_)   => MIO.pure(cv.upcast[F[Any, Any]])
                   case Right(cc) =>
-                    val fields = cc.caseFieldValuesAt(cv).toList
+                    val fields = allCaseFieldValuesAt(cc, cv).toList
                     val mapped: List[(String, Expr_??)] = fields.map { case (fn, fv) =>
                       import fv.Underlying as Field
                       val fe = fv.value.asInstanceOf[Expr[Field]]
@@ -458,7 +458,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
               CaseClass.parse[CT].toEither match {
                 case Left(_)   => MIO.pure(cExpr)
                 case Right(cc) =>
-                  val fields = cc.caseFieldValuesAt(cv).toList
+                  val fields = allCaseFieldValuesAt(cc, cv).toList
                   var acc = cExpr
                   fields.foreach { case (fn, fv) =>
                     import fv.Underlying as Field
@@ -494,7 +494,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
               CaseClass.parse[CT].toEither match {
                 case Left(_)   => MIO.pure(lcExpr)
                 case Right(cc) =>
-                  val fields = cc.caseFieldValuesAt(cv).toList
+                  val fields = allCaseFieldValuesAt(cc, cv).toList
                   val covariant: List[(Expr[Any], Boolean)] = fields.collect {
                     case (fn, fv) if info.leftFields.contains(fn) =>
                       import fv.Underlying as Field; (fv.value.asInstanceOf[Expr[Field]].upcast[Any], true)
@@ -541,7 +541,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
                       .upcast[Any]
                   )
                 case Right(cc) =>
-                  val fields = cc.caseFieldValuesAt(cv).toList
+                  val fields = allCaseFieldValuesAt(cc, cv).toList
                   val covariantFields = info.leftFields ++ info.rightFields
                   val gFieldExprs: List[Expr[CatsDerivationFactories.AnyF[Any]]] = fields.collect {
                     case (fn, fv) if info.leftFields.contains(fn) =>

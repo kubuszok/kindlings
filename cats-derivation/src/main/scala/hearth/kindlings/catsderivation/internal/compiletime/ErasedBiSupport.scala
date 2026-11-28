@@ -265,7 +265,7 @@ trait ErasedBiSupport
               val paramsII = ccII.primaryConstructor.totalParameters.flatten.toList
               val paramsSI = ccSI.primaryConstructor.totalParameters.flatten.toList
               val paramsIS = ccIS.primaryConstructor.totalParameters.flatten.toList
-              val accessible = ccAny.caseFieldValuesAt(Expr.quote(null.asInstanceOf[T])).size
+              val accessible = allCaseFieldValuesAt(ccAny, Expr.quote(null.asInstanceOf[T])).size
               if (
                 accessible != paramsAny.size || paramsII.size != paramsAny.size || paramsSI.size != paramsAny.size ||
                 paramsIS.size != paramsAny.size
@@ -274,7 +274,7 @@ trait ErasedBiSupport
               else {
                 val valuesBody: Expr[Any] => Expr[Array[Any]] = { fa =>
                   val value: Expr[T] = Expr.quote(Expr.splice(fa).asInstanceOf[T])
-                  biArrayOf(ccAny.caseFieldValuesAt(value).toList.map { case (_, fieldValue) =>
+                  biArrayOf(allCaseFieldValuesAt(ccAny, value).toList.map { case (_, fieldValue) =>
                     import fieldValue.Underlying as Field
                     fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
                   })

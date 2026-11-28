@@ -135,8 +135,8 @@ trait MonoidKMacrosImpl
       xExpr: Expr[F[Any]],
       yExpr: Expr[F[Any]]
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
-    val fieldsX = caseClass.caseFieldValuesAt(xExpr).toList
-    val fieldsY = caseClass.caseFieldValuesAt(yExpr).toList
+    val fieldsX = allCaseFieldValuesAt(caseClass, xExpr).toList
+    val fieldsY = allCaseFieldValuesAt(caseClass, yExpr).toList
 
     val combinedFieldsMIO: MIO[List[(String, Expr_??)]] =
       fieldsX.zip(fieldsY).traverse { case ((fieldName, fieldValueX), (_, fieldValueY)) =>

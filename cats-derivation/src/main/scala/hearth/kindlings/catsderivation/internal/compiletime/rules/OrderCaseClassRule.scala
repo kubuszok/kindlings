@@ -34,8 +34,8 @@ trait OrderCaseClassRuleImpl {
         x: Expr[A],
         y: Expr[A]
     ): MIO[Expr[Int]] = {
-      val fieldsX = caseClass.caseFieldValuesAt(x).toList
-      val fieldsY = caseClass.caseFieldValuesAt(y).toList
+      val fieldsX = allCaseFieldValuesAt(caseClass, x).toList
+      val fieldsY = allCaseFieldValuesAt(caseClass, y).toList
 
       NonEmptyList.fromList(fieldsX.zip(fieldsY)) match {
         case Some(fieldPairs) =>

@@ -50,7 +50,7 @@ trait GroupCaseClassRuleImpl {
                   deriveSemigroupRecursively[A](using SemigroupCtx(Type[A], x, y, gctx.cache, gctx.derivedType))
 
                 val inverse: Expr[A] => MIO[Expr[A]] = (aExpr) => {
-                  val fieldValues = caseClass.caseFieldValuesAt(aExpr).toList
+                  val fieldValues = allCaseFieldValuesAt(caseClass, aExpr).toList
                   NonEmptyList
                     .fromList(fieldValues)
                     .get

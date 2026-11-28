@@ -168,7 +168,7 @@ trait InvariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
     implicit val FBType: Type[F[B]] = FCtor.apply[B]
 
     parseCaseClassMIO[F[A]]("F[A]").parTuple(parseCaseClassMIO[F[B]]("F[B]")).flatMap { case (caseClass, caseClassB) =>
-      val fields = caseClass.caseFieldValuesAt(faExpr).toList
+      val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
       val fieldsB = caseClassB.primaryConstructor.totalParameters.flatten.toList
       val fieldBTypes: Map[String, Type[Any]] =
         fieldsB.map { case (name, param) => (name, param.tpe.Underlying.asInstanceOf[Type[Any]]) }.toMap
