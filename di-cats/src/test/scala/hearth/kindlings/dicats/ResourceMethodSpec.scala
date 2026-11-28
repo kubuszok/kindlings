@@ -46,8 +46,7 @@ final class ResourceMethodSpec extends MacroSuite {
 
     test("ignores a companion resource[F] that does not return a Resource of the type") {
       // `Plain.resource[F]` returns an `Option`, so `Plain` must be built through its constructor instead. (On Scala 2
-      // this needs Hearth >= 0.4.4, which stopped reporting a generic method's result type as `Nothing` - see
-      // docs/research/hearth-gap-method-generic-return-type.md.)
+      // this needs Hearth >= 0.4.4, which stopped reporting a generic method's result type as `Nothing`.)
       val res: Resource[SyncIO, Plain] = DICats.wireResource[SyncIO, Plain]()
       res.use(SyncIO.pure).unsafeRunSync().id ==> 7
     }

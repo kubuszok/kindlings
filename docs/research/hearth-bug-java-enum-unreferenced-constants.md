@@ -9,8 +9,10 @@ Two symptoms of the same cause:
 1. a Java enum none of whose constants is referred to by the code being compiled is **not an enum** for Hearth
    (`Enum.parse` fails with "is not sealed, not an enumeration, and not a union type"),
 2. the children of a Java enum some of whose constants are referred to come in the order in which the compiler
-   completed the constants - **the referred ones first** - not in declaration order. This is the "order varied between
-   compilations" observation of `hearth-java-enum-children-order.md`.
+   completed the constants - **the referred ones first** - not in declaration order. First observed in avro-derivation
+   (2026-11): for `public enum AuWineWithAnnotations { Malbec, Shiraz, @AvroJavaEnumDefault CabSav, Merlot }`
+   (`upstream-oracle-tests/src/test/java/...`), compiled in the same sbt module as the Scala tests, one Scala 3 build in
+   which the Scala sources were recompiled without the Java source listed `CabSav, Shiraz, Merlot, Malbec`.
 
 Both affect every JDK enum and every Java enum from a dependency, and a Java enum of the same sbt module whenever the
 Scala sources are recompiled without the Java source (the enum is then read from javac's class file).
@@ -95,6 +97,11 @@ children by position: declaration order.)
   `Enum.parse` (mixed in through `DerivationPolicy`, which every derivation macro bundle has). It must run before the
   first `Enum.parse` of the type: Hearth caches `Enum.unapply` per type.
 - `StableChildrenOrder.inStableOrder`: puts the children of a Java enum in that declaration order.
+- avro-derivation also sorts the symbols at runtime by `ordinal` / `id` (`AvroDerivationUtils.symbolsInDeclarationOrder`).
+
+Related, and deterministic: for a `scala.Enumeration` the children are listed by name, not by id (declaration order),
+on Scala 2.13 at least (`AuColours { val Red, Amber, Green = Value }` gives `Amber, Green, Red`); avro-derivation sorts
+those by `id` at runtime too.
 
 The workaround first lived in jsoniter-derivation only (`CodecMacros.completeJavaEnum`, from the jsoniter-scala parity
 work, `hearth-findings-jsoniter-parity-2026-11.md` item 4). Tests: `UnreferencedJavaEnum*Spec` in the JVM test sources

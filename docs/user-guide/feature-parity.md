@@ -464,8 +464,8 @@ set to a wrong type, renamed, plus unknown keys and wrapper/discriminator edge c
 cursor histories are compared too; on Scala 2 only outcomes and decoded values (Kindlings uses Scala 3 core's wording
 on both versions, see "Error messages and cursor history"). The differences found are the ones listed below as
 "Difference". The fixtures are compiled in another module than the tests (as for users deriving instances for types
-of a dependency), which keeps covering a since-fixed Hearth bug (`docs/research/hearth-bug-children-order-from-classpath.md`):
-the strict wrapper failure lists the constructor names in declaration order on Scala 3, like circe.
+of a dependency), which keeps covering a since-fixed Hearth bug (the order of the subtypes of a sealed type read from the
+classpath): the strict wrapper failure lists the constructor names in declaration order on Scala 3, like circe.
 
 The fixtures and configurations of upstream's own derivation test suites are run the same way
 (`CirceUpstreamSuitesOracleSpec`, `CirceCoreSuitesOracleSpec`): circe-generic's `SemiautoDerivedSuite`, circe-core's

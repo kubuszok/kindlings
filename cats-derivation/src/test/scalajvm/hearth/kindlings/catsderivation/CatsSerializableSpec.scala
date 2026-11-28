@@ -7,7 +7,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 /** Verifies that derived cats type class instances survive Java serialization round-trips (JVM only).
   *
   * This is important for Spark, Flink, and other distributed frameworks that serialize closures containing type class
-  * instances. Gap 3.5 from GAPS.md.
+  * instances.
   */
 final class CatsSerializableSpec extends MacroSuite {
 
