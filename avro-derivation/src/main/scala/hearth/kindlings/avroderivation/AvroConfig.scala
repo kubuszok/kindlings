@@ -86,6 +86,87 @@ final case class AvroConfig(
     */
   def withDecimalConfig(precision: Int, scale: Int, roundingMode: java.math.RoundingMode): AvroConfig =
     copy(decimalConfig = Some(DecimalConfig(precision, scale).withRoundingMode(roundingMode)))
+      .withRoundingMode(roundingMode)
+
+  // Not a constructor parameter, for the same reason as `DecimalConfig.roundingMode`: adding one would change the binary
+  // signatures (`apply`, `copy`, `unapply`) that code compiled against earlier versions links to. `null`: not set.
+  private var configRoundingMode: java.math.RoundingMode = null
+
+  /** How every decimal is rounded when it has more decimal places than its scale: the `DecimalConfig`'s decimals and
+    * the fields annotated with `@avroScalePrecision` (unless the annotation names its own rounding mode).
+    *
+    * It is the rounding mode set last with [[withRoundingMode]] or `withDecimalConfig(precision, scale, roundingMode)`;
+    * without one, the `decimalConfig`'s own `roundingMode`; otherwise `UNNECESSARY` (as avro4s 4): such a value is
+    * rejected with an `ArithmeticException` instead of being rounded.
+    */
+  def roundingMode: java.math.RoundingMode =
+    if (configRoundingMode != null) configRoundingMode
+    else
+      decimalConfig match {
+        case Some(dc) => dc.roundingMode
+        case None     => java.math.RoundingMode.UNNECESSARY
+      }
+
+  /** Round every decimal with more decimal places than its scale with `roundingMode` (as avro4s 4's implicit
+    * `RoundingMode`): the `DecimalConfig`'s decimals and the fields annotated with `@avroScalePrecision`, also when
+    * there is no `DecimalConfig` (without one, a plain `BigDecimal` stays a STRING). It overrides the rounding mode of
+    * the `DecimalConfig`, and `withDecimalConfig(precision, scale, roundingMode)` called after it overrides it.
+    */
+  def withRoundingMode(roundingMode: java.math.RoundingMode): AvroConfig = {
+    val updated = copy()
+    updated.configRoundingMode = roundingMode
+    updated
+  }
+
+  def copy(
+      namespace: Option[String] = this.namespace,
+      transformFieldNames: String => String = this.transformFieldNames,
+      transformConstructorNames: String => String = this.transformConstructorNames,
+      decimalConfig: Option[DecimalConfig] = this.decimalConfig,
+      instantPrecision: TimestampPrecision = this.instantPrecision,
+      localDateTimePrecision: TimestampPrecision = this.localDateTimePrecision,
+      offsetDateTimeAsIsoString: Boolean = this.offsetDateTimeAsIsoString,
+      scalaDefaultsInSchema: Boolean = this.scalaDefaultsInSchema
+  ): AvroConfig = {
+    val updated = new AvroConfig(
+      namespace,
+      transformFieldNames,
+      transformConstructorNames,
+      decimalConfig,
+      instantPrecision,
+      localDateTimePrecision,
+      offsetDateTimeAsIsoString,
+      scalaDefaultsInSchema
+    )
+    updated.configRoundingMode = configRoundingMode
+    updated
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: AvroConfig =>
+      namespace == that.namespace && transformFieldNames == that.transformFieldNames &&
+      transformConstructorNames == that.transformConstructorNames && decimalConfig == that.decimalConfig &&
+      instantPrecision == that.instantPrecision && localDateTimePrecision == that.localDateTimePrecision &&
+      offsetDateTimeAsIsoString == that.offsetDateTimeAsIsoString &&
+      scalaDefaultsInSchema == that.scalaDefaultsInSchema && configRoundingMode == that.configRoundingMode
+    case _ => false
+  }
+  override def hashCode: Int = (
+    namespace,
+    transformFieldNames,
+    transformConstructorNames,
+    decimalConfig,
+    instantPrecision,
+    localDateTimePrecision,
+    offsetDateTimeAsIsoString,
+    scalaDefaultsInSchema,
+    configRoundingMode
+  ).hashCode
+  override def toString: String = {
+    val fields = scala.runtime.ScalaRunTime._toString(this)
+    if (configRoundingMode == null) fields
+    else s"${fields.dropRight(1)},roundingMode=$configRoundingMode)"
+  }
 
   /** Precision of `java.time.Instant` and `java.sql.Timestamp` (default: `Millis`, as avro4s). */
   def withInstantPrecision(precision: TimestampPrecision): AvroConfig = copy(instantPrecision = precision)

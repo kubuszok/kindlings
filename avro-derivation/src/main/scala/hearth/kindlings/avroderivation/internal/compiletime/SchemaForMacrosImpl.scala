@@ -487,8 +487,41 @@ trait SchemaForMacrosImpl
   }
   private lazy val RoundingModeType: Type[java.math.RoundingMode] = Type.of[java.math.RoundingMode]
 
-  /** Encodes `value` as a decimal of `precision` and `scale`, with the rounding mode of the config (a constant when the
-    * config is known at compile time).
+  /** `@avroScalePrecision(precision, scale)` or `@avroScalePrecision(precision, scale, roundingMode)` on a field. */
+  final protected case class ScalePrecision(
+      precision: Int,
+      scale: Int,
+      roundingMode: Option[Expr[java.math.RoundingMode]]
+  )
+
+  /** The field's `@avroScalePrecision`. Its rounding mode is a constant in the generated code when the macro can
+    * evaluate it; otherwise (Hearth's `semiEval` cannot read a Java enum constant such as
+    * `java.math.RoundingMode.HALF_UP` on Scala 3, see `docs/research/hearth-gap-semieval-java-static-fields.md`) the
+    * annotation's argument expression itself is used.
+    */
+  protected def getScalePrecision(param: Parameter): Option[ScalePrecision] = {
+    implicit val avroScalePrecisionT: Type[avroScalePrecision] = SfTypes.AvroScalePrecision
+    implicit val RoundingModeT: Type[java.math.RoundingMode] = RoundingModeType
+    param.annotationsOfType[avroScalePrecision].headOption.flatMap { annotation =>
+      Annotations.decodedConstructorArguments(annotation).getOrElse(Nil) match {
+        case List(Right(precision: Int), Right(scale: Int))          => Some(ScalePrecision(precision, scale, None))
+        case List(Right(precision: Int), Right(scale: Int), decoded) =>
+          val roundingMode: Option[Expr[java.math.RoundingMode]] = decoded match {
+            case Right(mode: java.math.RoundingMode) => Some(roundingModeConstant(mode))
+            case _                                   =>
+              Annotations.constructorArguments(annotation).getOrElse(Nil).lift(2).collect {
+                case arg if arg.Underlying <:< Type[java.math.RoundingMode] =>
+                  arg.value.asInstanceOf[Expr[java.math.RoundingMode]]
+              }
+          }
+          Some(ScalePrecision(precision, scale, roundingMode))
+        case _ => None
+      }
+    }
+  }
+
+  /** Encodes `value` as a decimal of `precision` and `scale`, with `fieldRoundingMode` (of `@avroScalePrecision`) when
+    * given, otherwise with the rounding mode of the config (a constant when the config is known at compile time).
     */
   @scala.annotation.nowarn("msg=is never used")
   protected def encodeDecimalExpr(
@@ -496,16 +529,18 @@ trait SchemaForMacrosImpl
       precision: Int,
       scale: Int,
       config: Expr[AvroConfig],
-      evaluatedConfig: Option[AvroConfig]
+      evaluatedConfig: Option[AvroConfig],
+      fieldRoundingMode: Option[Expr[java.math.RoundingMode]] = None
   ): Expr[Any] = {
     implicit val AnyT: Type[Any] = Type.of[Any]
     implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
     implicit val RoundingModeT: Type[java.math.RoundingMode] = RoundingModeType
-    val roundingMode: Expr[java.math.RoundingMode] =
+    val roundingMode: Expr[java.math.RoundingMode] = fieldRoundingMode.getOrElse {
       evaluatedConfig.map(AvroDerivationUtils.decimalRoundingMode) match {
         case Some(mode) => roundingModeConstant(mode)
         case None       => Expr.quote(AvroDerivationUtils.decimalRoundingMode(Expr.splice(config)))
       }
+    }
     Expr.quote {
       AvroDerivationUtils.encodeBigDecimal(
         Expr.splice(value),

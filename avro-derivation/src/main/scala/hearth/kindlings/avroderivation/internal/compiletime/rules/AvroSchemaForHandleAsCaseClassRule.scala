@@ -151,7 +151,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                   if (hasAnnotationType[avroNoDefault](param)) None
                   else getAnnotationStringArg[avroDefault](param)
                 val avroFixedSize = getAnnotationIntArg[avroFixed](param)
-                val decimalOverride = getAnnotationTwoIntArgs[avroScalePrecision](param)
+                val decimalOverride = getScalePrecision(param).map(sp => (sp.precision, sp.scale))
                 val fieldProps = getAllAnnotationTwoStringArgs[avroProp](param)
                 val fieldAliases = getAllAnnotationStringArgs[avroAlias](param)
                 val fieldNamespaceOverride = getAnnotationStringArg[avroNamespace](param)

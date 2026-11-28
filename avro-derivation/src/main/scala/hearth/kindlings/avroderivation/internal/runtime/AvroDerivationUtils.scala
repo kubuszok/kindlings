@@ -376,12 +376,9 @@ object AvroDerivationUtils {
   /** The rounding mode with this ordinal (a rounding mode known at compile time, in the generated code). */
   def roundingModeOf(ordinal: Int): java.math.RoundingMode = roundingModes(ordinal)
 
-  /** The rounding mode of the config's decimals (`UNNECESSARY` without a `DecimalConfig`). */
+  /** The rounding mode of the config's decimals (`AvroConfig.roundingMode`). */
   def decimalRoundingMode(config: hearth.kindlings.avroderivation.AvroConfig): java.math.RoundingMode =
-    config.decimalConfig match {
-      case Some(decimalConfig) => decimalConfig.roundingMode
-      case None                => java.math.RoundingMode.UNNECESSARY
-    }
+    config.roundingMode
 
   def encodeEither[L, R](value: Either[L, R], encodeLeft: L => Any, encodeRight: R => Any): Any =
     value match {

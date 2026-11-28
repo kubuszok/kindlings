@@ -129,7 +129,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
               }
               val aliases = getAllAnnotationStringArgs[avroAlias](param)
               val avroFixedSize = getAnnotationIntArg[avroFixed](param)
-              val decimalOverride = getAnnotationTwoIntArgs[avroScalePrecision](param)
+              val decimalOverride = getScalePrecision(param).map(sp => (sp.precision, sp.scale))
 
               // No alias (the usual case) and one alias have their own overloads: no list is built per decoded field.
               def fieldByNameOrAlias(record: Expr[GenericRecord]): Expr[Any] = aliases match {

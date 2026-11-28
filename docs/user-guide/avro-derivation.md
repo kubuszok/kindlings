@@ -105,7 +105,8 @@ implicit val config: AvroConfig = AvroConfig.default
 | `withPascalCaseFieldNames` | `fieldName` -> `FieldName` |
 | `withTransformConstructorNames(f)` | Custom constructor name transform for sealed traits |
 | `withDecimalConfig(precision, scale)` | Global `BigDecimal` precision and scale (BYTES + `decimal` logical type; without it `BigDecimal` is a STRING). A value with more decimal places than the scale, or more digits than the precision, is rejected |
-| `withDecimalConfig(precision, scale, roundingMode)` | The same, rounding values with more decimal places than the scale with a `java.math.RoundingMode` (as avro4s 4's implicit `RoundingMode`; the default is `UNNECESSARY`, i.e. rejecting them). Also applies to `@avroScalePrecision` fields |
+| `withDecimalConfig(precision, scale, roundingMode)` | The same, rounding values with more decimal places than the scale with a `java.math.RoundingMode` (as avro4s 4's implicit `RoundingMode`; the default is `UNNECESSARY`, i.e. rejecting them). Also applies to `@avroScalePrecision` fields; shorthand for `withDecimalConfig(precision, scale).withRoundingMode(roundingMode)` |
+| `withRoundingMode(roundingMode)` | Rounding mode of every decimal (`java.math.RoundingMode`, default `UNNECESSARY`): the `DecimalConfig`'s and the `@avroScalePrecision` fields', also without a `DecimalConfig`. See [Decimal rounding](#decimal-rounding) |
 | `withInstantPrecision(p)` | `Instant` / `java.sql.Timestamp` precision: `TimestampPrecision.Millis` (default), `Micros` or `Nanos` |
 | `withLocalDateTimePrecision(p)` | `LocalDateTime` precision: `TimestampPrecision.Nanos` (default, as avro4s), `Micros` or `Millis` |
 | `withOffsetDateTimeAsIsoString` | Encode `OffsetDateTime` as avro4s does: an ISO-8601 string (default: a UTC `timestamp-millis` long) |
@@ -114,6 +115,36 @@ implicit val config: AvroConfig = AvroConfig.default
 `AvroConfig.avro4sDefaults` is a preset with avro4s' behaviour where Kindlings' defaults differ: `BigDecimal` as
 `decimal(8, 2)` and `OffsetDateTime` as an ISO-8601 string (see
 [Feature parity](feature-parity.md#avro-derivation)).
+
+### Decimal rounding
+
+A `BigDecimal` encoded as a `decimal` (with `withDecimalConfig` or `@avroScalePrecision`) that has more decimal places
+than the scale is rejected with an `ArithmeticException` by default (`RoundingMode.UNNECESSARY`, as avro4s 4). To round
+it instead, pick a `java.math.RoundingMode`:
+
+```scala
+import java.math.RoundingMode
+
+// every decimal: the DecimalConfig's and the @avroScalePrecision fields' (no DecimalConfig needed)
+implicit val config: AvroConfig = AvroConfig.default.withRoundingMode(RoundingMode.HALF_UP)
+
+case class Invoice(
+    @avroScalePrecision(10, 2) total: BigDecimal,                       // HALF_UP, from the config
+    @avroScalePrecision(10, 4, RoundingMode.HALF_EVEN) rate: BigDecimal  // its own rounding mode
+)
+```
+
+The rounding mode of a decimal is, from the most specific:
+
+1. the one given to its field's `@avroScalePrecision(precision, scale, roundingMode)`,
+2. `AvroConfig.roundingMode`: the one set last with `withRoundingMode(mode)` or
+   `withDecimalConfig(precision, scale, mode)` (so `withDecimalConfig(8, 2, FLOOR).withRoundingMode(HALF_UP)` rounds
+   `HALF_UP`, and `withRoundingMode(HALF_UP).withDecimalConfig(8, 2, FLOOR)` rounds `FLOOR`; the 2-argument
+   `withDecimalConfig(precision, scale)` keeps a rounding mode set before it),
+3. without either, the `DecimalConfig`'s own `roundingMode` (`DecimalConfig(8, 2).withRoundingMode(mode)` passed with
+   `copy(decimalConfig = ...)`), otherwise `UNNECESSARY`.
+
+`withRoundingMode` does not turn a plain `BigDecimal` into a `decimal`: without a `DecimalConfig` it is still a STRING.
 
 ## Annotations
 
@@ -148,7 +179,8 @@ import hearth.kindlings.avroderivation.annotations._
 |-----------|--------|-------------|
 | `@avroFixed(size)` | Field (`Array[Byte]` or `String`), value class of one | Use a FIXED type of `size` bytes: a shorter value is padded with zeros (a `String` is written as UTF-8 and read back with the padding), a longer one is rejected. On a value class, the FIXED type is named after the class |
 | `@avroError` | Type, Field | Mark record as an Avro error type (on a field: the record of that field) |
-| `@avroScalePrecision(precision, scale)` | Field (`BigDecimal`) | Per-field decimal precision and scale |
+| `@avroScalePrecision(precision, scale)` | Field (`BigDecimal`) | Per-field decimal precision and scale (rounded with `AvroConfig.roundingMode`) |
+| `@avroScalePrecision(precision, scale, roundingMode)` | Field (`BigDecimal`) | The same, rounded with its own `java.math.RoundingMode` whatever the config says (see [Decimal rounding](#decimal-rounding)) |
 | `@avroSortPriority(n)` | Type | Control ordering of subtypes in UNION/ENUM schemas (higher first) |
 | `@avroUnionPosition(n)` | Type | Position of a subtype in UNION/ENUM schemas (lower first): new subtypes can be appended without renumbering the others. `@avroSortPriority` on the same subtype takes precedence |
 | `@AvroJavaName`, `@AvroJavaNamespace`, `@AvroJavaProp(key, value)`, `@AvroJavaEnumDefault` | Java enum (the last one: a constant) | Java annotations (same package) for Java enums, which cannot carry the Scala ones: the ENUM's name, namespace, a property and the default symbol |

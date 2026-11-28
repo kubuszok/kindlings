@@ -114,6 +114,58 @@ object PaDecimalInstances {
   }
 }
 
+/** `AvroConfig.withRoundingMode`: a rounding mode for every decimal, also without a global `DecimalConfig`. */
+object PaRoundingModeInstances {
+  import java.math.RoundingMode.{CEILING, FLOOR, HALF_UP}
+
+  // only @avroScalePrecision fields are decimals here; the config-level rounding mode applies to them
+  object AnnotatedOnly {
+    implicit val config: AvroConfig = AvroConfig.default.withRoundingMode(HALF_UP)
+    val encoder: AvroEncoder[PaDecimal] = AvroEncoder.derived[PaDecimal]
+    val decoder: AvroDecoder[PaDecimal] = AvroDecoder.derived[PaDecimal]
+    val plainEncoder: AvroEncoder[PaDecimalValue] = AvroEncoder.derived[PaDecimalValue]
+  }
+  // the 2-argument withDecimalConfig after withRoundingMode keeps the config-level rounding mode
+  object WithDecimalConfig {
+    implicit val config: AvroConfig = AvroConfig.default.withRoundingMode(HALF_UP).withDecimalConfig(8, 2)
+    val encoder: AvroEncoder[PaDecimalValue] = AvroEncoder.derived[PaDecimalValue]
+    val decoder: AvroDecoder[PaDecimalValue] = AvroDecoder.derived[PaDecimalValue]
+  }
+  // the last rounding mode set wins: withRoundingMode overrides the DecimalConfig's
+  object ConfigLevelLast {
+    implicit val config: AvroConfig = AvroConfig.default.withDecimalConfig(8, 2, FLOOR).withRoundingMode(CEILING)
+    val encoder: AvroEncoder[PaDecimalValue] = AvroEncoder.derived[PaDecimalValue]
+    val decoder: AvroDecoder[PaDecimalValue] = AvroDecoder.derived[PaDecimalValue]
+  }
+  // ... and withDecimalConfig(precision, scale, roundingMode) overrides an earlier withRoundingMode
+  object DecimalConfigLast {
+    implicit val config: AvroConfig = AvroConfig.default.withRoundingMode(CEILING).withDecimalConfig(8, 2, FLOOR)
+    val encoder: AvroEncoder[PaDecimalValue] = AvroEncoder.derived[PaDecimalValue]
+    val decoder: AvroDecoder[PaDecimalValue] = AvroDecoder.derived[PaDecimalValue]
+  }
+  // the annotation's own rounding mode wins over the config's
+  object AnnotationMode {
+    implicit val config: AvroConfig = AvroConfig.default.withRoundingMode(CEILING)
+    val encoder: AvroEncoder[PaDecimalFloor] = AvroEncoder.derived[PaDecimalFloor]
+    val decoder: AvroDecoder[PaDecimalFloor] = AvroDecoder.derived[PaDecimalFloor]
+    val schemaFor: AvroSchemaFor[PaDecimalFloor] = AvroSchemaFor.derived[PaDecimalFloor]
+  }
+  // `config` is a parameter: the macro cannot evaluate it and reads the rounding mode at runtime
+  def annotatedEncoderWith(config: AvroConfig): AvroEncoder[PaDecimal] = {
+    implicit val runtimeConfig: AvroConfig = config
+    AvroEncoder.derived[PaDecimal]
+  }
+  def encoderWith(config: AvroConfig): AvroEncoder[PaDecimalValue] = {
+    implicit val runtimeConfig: AvroConfig = config
+    AvroEncoder.derived[PaDecimalValue]
+  }
+  def annotationModeEncoderWith(config: AvroConfig): AvroEncoder[PaDecimalFloor] = {
+    implicit val runtimeConfig: AvroConfig = config
+    AvroEncoder.derived[PaDecimalFloor]
+  }
+}
+case class PaDecimalFloor(@avroScalePrecision(8, 2, java.math.RoundingMode.FLOOR) amount: BigDecimal)
+
 case class PaError(code: Int)
 case class PaVeryCross(@avroError error: PaError)
 
@@ -427,6 +479,74 @@ final class AvroAvro4sParitySpec extends MacroSuite {
       halfUp ==> DecimalConfig(8, 2).withRoundingMode(java.math.RoundingMode.HALF_UP)
       AvroConfig.default.withDecimalConfig(8, 2, java.math.RoundingMode.DOWN).withNamespace("x").decimalConfig ==>
         Some(DecimalConfig(8, 2).withRoundingMode(java.math.RoundingMode.DOWN))
+    }
+
+    test("AvroConfig.withRoundingMode rounds @avroScalePrecision fields without a DecimalConfig") {
+      import PaRoundingModeInstances.AnnotatedOnly
+      AnnotatedOnly.decoder.decode(AnnotatedOnly.encoder.encode(PaDecimal(BigDecimal("1.005")))) ==>
+        PaDecimal(BigDecimal("1.01"))
+      // without a DecimalConfig a plain BigDecimal stays a STRING: the rounding mode does not make it a decimal
+      AnnotatedOnly.plainEncoder.encode(PaDecimalValue(BigDecimal("1.005"))) match {
+        case record: GenericRecord => record.get("amount").toString ==> "1.005"
+        case other                 => throw new AssertionError(s"expected a record, got $other")
+      }
+      val runtime = PaRoundingModeInstances.annotatedEncoderWith(AnnotatedOnly.config)
+      AnnotatedOnly.decoder.decode(runtime.encode(PaDecimal(BigDecimal("1.005")))) ==> PaDecimal(BigDecimal("1.01"))
+      val strictAtRuntime = PaRoundingModeInstances.annotatedEncoderWith(AvroConfig.default)
+      val _ = intercept[ArithmeticException](strictAtRuntime.encode(PaDecimal(BigDecimal("1.005"))))
+    }
+
+    test("AvroConfig.withRoundingMode applies to the DecimalConfig's decimals; the last rounding mode set wins") {
+      import PaRoundingModeInstances.{ConfigLevelLast, DecimalConfigLast, WithDecimalConfig}
+      WithDecimalConfig.decoder.decode(WithDecimalConfig.encoder.encode(PaDecimalValue(BigDecimal("12.345")))) ==>
+        PaDecimalValue(BigDecimal("12.35"))
+      ConfigLevelLast.decoder.decode(ConfigLevelLast.encoder.encode(PaDecimalValue(BigDecimal("12.341")))) ==>
+        PaDecimalValue(BigDecimal("12.35"))
+      DecimalConfigLast.decoder.decode(DecimalConfigLast.encoder.encode(PaDecimalValue(BigDecimal("12.349")))) ==>
+        PaDecimalValue(BigDecimal("12.34"))
+      // the same with the config read at runtime
+      val runtime = PaRoundingModeInstances.encoderWith(WithDecimalConfig.config)
+      WithDecimalConfig.decoder.decode(runtime.encode(PaDecimalValue(BigDecimal("12.345")))) ==>
+        PaDecimalValue(BigDecimal("12.35"))
+      val configLevelAtRuntime = PaRoundingModeInstances.encoderWith(ConfigLevelLast.config)
+      ConfigLevelLast.decoder.decode(configLevelAtRuntime.encode(PaDecimalValue(BigDecimal("12.341")))) ==>
+        PaDecimalValue(BigDecimal("12.35"))
+      val decimalConfigAtRuntime = PaRoundingModeInstances.encoderWith(DecimalConfigLast.config)
+      DecimalConfigLast.decoder.decode(decimalConfigAtRuntime.encode(PaDecimalValue(BigDecimal("12.349")))) ==>
+        PaDecimalValue(BigDecimal("12.34"))
+    }
+
+    test("AvroConfig.roundingMode: the effective rounding mode, kept through copy and compared by equals") {
+      import java.math.RoundingMode.{CEILING, FLOOR, HALF_UP, UNNECESSARY}
+      AvroConfig.default.roundingMode ==> UNNECESSARY
+      AvroConfig.default.withDecimalConfig(8, 2).roundingMode ==> UNNECESSARY
+      AvroConfig.default.withRoundingMode(HALF_UP).roundingMode ==> HALF_UP
+      AvroConfig.default.withRoundingMode(HALF_UP).withDecimalConfig(8, 2).roundingMode ==> HALF_UP
+      AvroConfig.default.withDecimalConfig(8, 2, FLOOR).roundingMode ==> FLOOR
+      AvroConfig.default.withDecimalConfig(8, 2, FLOOR).withRoundingMode(CEILING).roundingMode ==> CEILING
+      AvroConfig.default.withRoundingMode(CEILING).withDecimalConfig(8, 2, FLOOR).roundingMode ==> FLOOR
+      // a DecimalConfig's own rounding mode applies when the config has none
+      AvroConfig(decimalConfig = Some(DecimalConfig(8, 2).withRoundingMode(FLOOR))).roundingMode ==> FLOOR
+      val halfUp = AvroConfig.default.withRoundingMode(HALF_UP)
+      halfUp.withNamespace("x").withSnakeCaseFieldNames.roundingMode ==> HALF_UP
+      halfUp.copy(namespace = Some("y")).roundingMode ==> HALF_UP
+      assert(halfUp != AvroConfig.default)
+      halfUp ==> AvroConfig.default.withRoundingMode(HALF_UP)
+      halfUp.hashCode ==> AvroConfig.default.withRoundingMode(HALF_UP).hashCode
+    }
+
+    test("@avroScalePrecision(precision, scale, roundingMode) rounds its field with its own rounding mode") {
+      import PaRoundingModeInstances.AnnotationMode
+      val field = AnnotationMode.schemaFor.schema.getField("amount").schema()
+      field.getLogicalType ==> org.apache.avro.LogicalTypes.decimal(8, 2)
+      AnnotationMode.decoder.decode(AnnotationMode.encoder.encode(PaDecimalFloor(BigDecimal("1.009")))) ==>
+        PaDecimalFloor(BigDecimal("1.00"))
+      val runtime = PaRoundingModeInstances.annotationModeEncoderWith(AnnotationMode.config)
+      AnnotationMode.decoder.decode(runtime.encode(PaDecimalFloor(BigDecimal("1.009")))) ==>
+        PaDecimalFloor(BigDecimal("1.00"))
+      val defaultConfig = PaRoundingModeInstances.annotationModeEncoderWith(AvroConfig.default)
+      AnnotationMode.decoder.decode(defaultConfig.encode(PaDecimalFloor(BigDecimal("1.009")))) ==>
+        PaDecimalFloor(BigDecimal("1.00"))
     }
 
     test("a null Boolean decodes as false; null for other primitives is rejected") {

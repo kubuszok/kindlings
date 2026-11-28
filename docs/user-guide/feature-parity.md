@@ -38,7 +38,7 @@ The only differences are the ones documented below ("Design decisions" and "Defa
 | Record defaults (avro4s 4 bug) | `None` fields are left out of a case class default (`{"name": "x"}`) | The complete record (`{"name": "x", "age": null}`), as avro4s 5 | Avro rejects the incomplete default when it is needed |
 | Sealed trait's `@AvroNamespace` (avro4s 4) | Applied to the subtypes only as members of the trait's union; a subtype derived on its own keeps its package | A subtype without its own `@avroNamespace` always takes its sealed parent's (as avro4s 5) | The encoder builds a subtype's record from the subtype's own schema: it must have the name it has in the union |
 | Sealed trait with one subtype (avro4s 5 differs) | avro4s 5: the subtype's record, without a union (avro4s 4: a union of one) | A union of one, as avro4s 4, on both Scala versions | Follows avro4s 4: one wire format on both Scala versions; adding a second subtype stays a compatible change |
-| Decimal rounding (avro4s 5 differs) | avro4s 5 always rounds a value with more decimal places than the scale `HALF_UP` (avro4s 4: an implicit `RoundingMode`, default `UNNECESSARY`, i.e. rejected) | `DecimalConfig.roundingMode` (`withDecimalConfig(precision, scale, roundingMode)`), default `UNNECESSARY`, as avro4s 4, on both Scala versions | Follows avro4s 4: no silent loss of precision by default |
+| Decimal rounding (avro4s 5 differs) | avro4s 5 always rounds a value with more decimal places than the scale `HALF_UP` (avro4s 4: an implicit `RoundingMode`, default `UNNECESSARY`, i.e. rejected) | `AvroConfig.withRoundingMode(mode)` (every decimal, also `@avroScalePrecision` fields without a `DecimalConfig`), `withDecimalConfig(precision, scale, roundingMode)` or per field `@avroScalePrecision(precision, scale, roundingMode)`; default `UNNECESSARY`, as avro4s 4, on both Scala versions | Follows avro4s 4: no silent loss of precision by default |
 | avro4s bugs not reproduced | avro4s 4 cannot encode an `Option` below a field `@AvroNamespace`, decodes only the `Left` of `Either[A, Option[B]]`; avro4s 5 cannot encode a sealed trait below a field `@AvroNamespace`, `Either[A, Option[B]]` or a `None.type` field, ignores `@AvroName` on type arguments, decodes the `Right` of `Either[Long, Int]` as a `Left` | All work | Superset |
 
 ### Default value differences
@@ -64,7 +64,7 @@ with a newer reader schema that adds fields with Scala defaults (`missing requir
 | Field name transforms (`FieldMapper`) | Yes (`SnakeCase`, custom; broken on avro4s 5) | Yes (3 built-in strategies — snake, kebab, Pascal case — plus a custom function via `withTransformFieldNames`) | Parity |
 | Constructor name transforms | Not built-in | Yes | Improvement |
 | Decimal config (precision/scale) | `@AvroScalePrecision` or implicit `ScalePrecision` | `AvroConfig.decimalConfig`, `@avroScalePrecision` | Parity (different API) |
-| Decimal rounding mode | Implicit `RoundingMode` (v4; v5: always `HALF_UP`) | `withDecimalConfig(precision, scale, roundingMode)` | Parity with v4 (different API) |
+| Decimal rounding mode | Implicit `RoundingMode` (v4; v5: always `HALF_UP`) | `withRoundingMode(roundingMode)` / `withDecimalConfig(precision, scale, roundingMode)`; per field `@avroScalePrecision(precision, scale, roundingMode)` | Parity with v4 (different API); the per-field rounding mode is a superset |
 | Timestamp precision | A `SchemaFor` with the `timestamp-micros`/`-nanos` logical type | `withInstantPrecision`, `withLocalDateTimePrecision` | Parity (different API) |
 
 ### Type classes
