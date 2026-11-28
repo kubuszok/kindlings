@@ -212,6 +212,48 @@ case class User(
     // Right(Settings(localhost,8080,false))
     ```
 
+## Instances you provide
+
+An `Encoder`/`Decoder` found by implicit search (in a companion, imported, or a local `implicit val`) is always used
+for a field instead of deriving its type, also inside collections, options and other derived types.
+
+A **generic** instance is used too when the instances it needs have to be derived by Kindlings:
+
+```scala
+case class Item(n: Int)
+case class Page[A](items: List[A])
+object Page {
+  implicit def enc[A](implicit a: Encoder[A]): Encoder[Page[A]] = ... // writes {"DATA":[...]}
+}
+case class HoldsItems(page: Page[Item])
+
+KindlingsEncoder.derived[HoldsItems] // {"page":{"DATA":[{"n":1}]}}: Page.enc with a derived Encoder[Item]
+```
+
+`Encoder[Item]` does not exist, so `Encoder[Page[Item]]` is not found by itself; Kindlings then derives the instances
+of the type arguments of `Page[Item]` that have none (`Item`), as values of the derived instance, and builds
+`Page.enc` with them. This works for recursive types (`case class Tree(children: Page[Tree])` passes its own encoder)
+and for instances needing several instances (`implicit def enc[A, B](implicit a: Encoder[A], b: Encoder[B])`).
+(Before, the field was silently derived structurally, with a different JSON.)
+
+What is not completed (the type is derived structurally, as before):
+
+- instances of a **different type class** than the one being derived (`implicit def enc[A](implicit e:
+  Encoder.AsObject[A])` or `(implicit s: Show[A])`), and instances of types that are not type arguments of the field's
+  type (`implicit def enc[A](implicit e: Encoder[List[A]]): Encoder[Page[A]]`);
+- instances of types that are not case classes, case objects, sealed hierarchies or enums (collections, `Option`, value
+  types and tuples have built-in handling);
+- more than 8 such type arguments (Scala 3).
+
+For those, put the nested instances in scope as values before deriving, e.g.
+`implicit val item: Encoder[Item] = KindlingsEncoder.derived[Item]` (local `implicit lazy val`s around the derivation
+also work, mutual recursion through your instance included).
+
+If the search for an instance fails because the macro of a candidate (e.g. a library's auto-derivation entry point)
+**throws an exception**, the derivation fails with `The implicit search for X failed because the macro expansion of a
+candidate crashed ...` and the exception (Scala 3; Scala 2 reports the exception itself) instead of deriving the type
+structurally.
+
 ## Behaviour matching upstream circe
 
 Decoding and encoding follow circe's Scala 3 `ConfiguredEncoder`/`ConfiguredDecoder` (and circe-generic-extras on
@@ -314,6 +356,9 @@ Scala 2):
 Changes of the encoded JSON, and of decoding, made to match upstream circe. Values written by an earlier Kindlings
 version may need to be migrated:
 
+- **Generic instances needing derived instances**: a field whose type has a user-provided generic instance
+  (`implicit def enc[A](implicit a: Encoder[A]): Encoder[Page[A]]`) was derived structurally when `Encoder[A]` had to
+  be derived; that instance is now used (see [Instances you provide](#instances-you-provide)).
 - **Nested sealed hierarchies**: a leaf of a nested sealed trait was written under the intermediate's name
   (`{"Parent":{"Child":{..}}}`, or `"type":"Parent"` with a discriminator); it is now written under its own name
   (`{"Child":{..}}` / `"type":"Child"`), and the old nested form is no longer read. The same applies to an intermediate
