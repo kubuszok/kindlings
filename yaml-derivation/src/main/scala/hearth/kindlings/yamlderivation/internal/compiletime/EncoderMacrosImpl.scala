@@ -408,6 +408,8 @@ trait EncoderMacrosImpl
 
     def YamlEncoder: Type.Ctor1[YamlEncoder] = Type.Ctor1.of[YamlEncoder]
     def KindlingsYamlEncoder: Type.Ctor1[KindlingsYamlEncoder] = Type.Ctor1.of[KindlingsYamlEncoder]
+    def YamlKeyEncoder: Type.Ctor1[hearth.kindlings.yamlderivation.YamlKeyEncoder] =
+      Type.Ctor1.of[hearth.kindlings.yamlderivation.YamlKeyEncoder]
     val EncoderLogDerivation: Type[hearth.kindlings.yamlderivation.KindlingsYamlEncoder.LogDerivation] =
       Type.of[hearth.kindlings.yamlderivation.KindlingsYamlEncoder.LogDerivation]
     val Node: Type.Lazy[Node] = Type.Lazy(Type.of[Node])
@@ -425,6 +427,7 @@ trait EncoderMacrosImpl
     val Char: Type.Lazy[Char] = Type.Lazy(Type.of[Char])
     val BigDecimal: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
     val BigInt: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
+    val UUID: Type.Lazy[java.util.UUID] = Type.Lazy(Type.of[java.util.UUID])
     val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
   }
 }

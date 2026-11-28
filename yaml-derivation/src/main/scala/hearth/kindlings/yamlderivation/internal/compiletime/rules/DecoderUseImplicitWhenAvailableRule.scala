@@ -20,6 +20,13 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
         case method if method.isImplicit => method.asUntyped
       }
 
+    /** scala-yaml's `YamlDecoder.forMap` is not used for a map: Kindlings derives maps itself, so that keys go through
+      * their key codecs (`YamlKeyDecoder`) instead of scala-yaml's `YamlDecoder[K]` (a user-provided instance for the
+      * whole map type is still used).
+      */
+    lazy val ignoredImplicitsAndScalaYamlMaps: Seq[UntypedMethod] =
+      ignoredImplicits ++ Type.of[org.virtuslab.yaml.YamlDecoder.type].unsortedMethodsNamed("forMap").map(_.asUntyped)
+
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
       Log.info(s"Attempting to use implicit YamlDecoder for ${Type[A].prettyPrint}") >> {
         if (dctx.derivedType.exists(_.Underlying =:= Type[A]))
@@ -27,7 +34,7 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
             Rule.yielded(s"The type ${Type[A].prettyPrint} is the type being derived, skipping implicit search")
           )
         else
-          DTypes.YamlDecoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
+          DTypes.YamlDecoder[A].summonExprIgnoring(ignoredImplicitsAndScalaYamlMaps*).toEither match {
             case Right(instanceExpr) => cacheAndUse[A](instanceExpr)
             case Left(reason)        => yieldUnsupported[A](reason)
           }

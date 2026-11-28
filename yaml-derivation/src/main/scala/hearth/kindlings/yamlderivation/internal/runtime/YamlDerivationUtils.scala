@@ -278,6 +278,32 @@ object YamlDerivationUtils {
       case other => throw new CollectionBuildException(cannotConstruct("java.lang.String", other))
     }
 
+  /** A map key's scalar value: a scalar that is not a null (else scala-yaml's failure for the key's class). */
+  def keyScalar(keyNode: Node, className: String): Either[ConstructError, String] =
+    keyNode match {
+      case ScalarNode(value, tag) if tag != Tag.nullTag => Right(value)
+      case other                                        => Left(cannotConstruct(className, other))
+    }
+
+  /** A map key read with a key decoder (`YamlKeyDecoder`); a failure without a position is reported at the key. */
+  def decodeKeyWithCodec[K](
+      keyNode: Node,
+      className: String,
+      codec: hearth.kindlings.yamlderivation.YamlKeyDecoder[K]
+  ): Either[ConstructError, K] =
+    keyNode match {
+      case ScalarNode(value, tag) if tag != Tag.nullTag =>
+        codec.decodeKey(value) match {
+          case Left(error) if error.node.forall(_.pos.isEmpty) => Left(error.copy(node = Some(keyNode)))
+          case result                                          => result
+        }
+      case other => Left(cannotConstruct(className, other))
+    }
+
+  /** A map key that is not one of the names of the enum's cases. */
+  def unknownEnumKey(name: String, keyNode: Node, knownNames: List[String]): ConstructError =
+    ConstructError.from(s"Unknown key $name. Expected one of: ${knownNames.mkString(", ")}", keyNode)
+
   /** A map key decoded with the derived `decode`. */
   def decodeKeyWith[K](keyNode: Node, decode: Node => Either[ConstructError, K]): K =
     decode(keyNode) match {

@@ -48,7 +48,7 @@ trait DecoderHandleAsValueTypeRuleImpl {
       }
 
     @scala.annotation.nowarn("msg=is never used")
-    private def buildWrapLambda[A: Type, Inner: Type](
+    private[rules] def buildWrapLambda[A: Type, Inner: Type](
         isValueType: IsValueTypeOf[A, Inner]
     )(implicit dctx: DecoderCtx[?]) = {
       implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]

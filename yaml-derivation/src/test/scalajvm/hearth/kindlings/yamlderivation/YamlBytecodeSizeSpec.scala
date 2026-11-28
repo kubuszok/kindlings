@@ -56,6 +56,24 @@ final class YamlBytecodeSizeSpec extends MacroSuite {
     assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
   }
 
+  test("no method of the map-key codecs derived for an enum of 100 case objects exceeds HotSpot's JIT limit") {
+    val sizes = BytecodeSizes.methodSizes(YamlWideKeyInstances.getClass)
+    assert(sizes.map(_._3).sum > 3000, s"expected the derived instances' code, got: $sizes")
+    val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
+    assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
+  }
+
+  test("enum map keys round-trip, with compile-time and runtime configurations") {
+    val value = WideKeyMap(Map(WideKey.K00 -> 0, WideKey.K57 -> 57, WideKey.K99 -> 99))
+    val node = YamlWideKeyInstances.encoder.asNode(value)
+    YamlWideKeyInstances.encoderWith(YamlConfig()).asNode(value) ==> node
+    YamlWideKeyInstances.decoder.construct(node) ==> Right(value)
+    YamlWideKeyInstances.decoderWith(YamlConfig()).construct(node) ==> Right(value)
+    val kebab = YamlConfig().withKebabCaseConstructorNames
+    YamlWideKeyInstances.decoderWith(kebab).construct(YamlWideKeyInstances.encoderWith(kebab).asNode(value)) ==>
+      Right(value)
+  }
+
   test("a configuration known at compile time leaves no runtime branches on the configuration in sum dispatch") {
     // positive control: with a runtime configuration the dispatch reads it
     assert(BytecodeSizes.refersTo(YamlWideSumRuntimeInstances.getClass, "transformConstructorNames"))
