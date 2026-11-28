@@ -730,7 +730,7 @@ against kindlings-di (`di/src/test/scala*/hearth/kindlings/di/upstream/`).
 | Candidates: members of enclosing classes/objects (declared and inherited), `@Module` members, parameters of the enclosing method | Yes | Yes | Parity |
 | Candidates: parameters of outer methods and of enclosing lambdas, non-`val` constructor parameters, pattern-bound values, imported members | Yes | No | Difference (see `di.md`) |
 | Candidates: local `val`s | Yes | Scala 2 only (top level of the method body) | Difference |
-| Declared members preferred over inherited ones | Yes | No (ambiguity) | Difference |
+| Declared members preferred over inherited ones (ambiguity only among candidates of the same priority) | Yes | Yes | Parity |
 | Untyped `val x = wire[X]` on Scala 2 | Yes | No (needs `: X`) | Difference (Hearth, `docs/research/hearth-bug-scala2-untyped-val-enclosing-scope.md`) |
 | Request/session scopes (JVM proxies) | Yes | No | Not ported (cross-platform module) |
 | `DI.plan` (storage strategies, construction overrides, wiring graph) | No | Yes | Improvement |

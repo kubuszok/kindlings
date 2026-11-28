@@ -166,8 +166,9 @@ private[di] trait WiringMacrosImpl
 
   /** Collect every value reachable from the enclosing lexical scope, grouped by scope and ordered from the INNERMOST
     * scope outward (mirroring macwire's `EligibleValuesFinder`). Each element is one scope's candidate values:
-    *   - accessible nullary members (`val`/`def`/`lazy val`) of the enclosing classes and objects (declared and
-    *     inherited), read off their `this`/module reference;
+    *   - accessible nullary members (`val`/`def`/`lazy val`) of the enclosing classes and objects, read off their
+    *     `this`/module reference - the declared members first, the inherited ones in the next scope (see
+    *     [[scopesForMembers]]);
     *   - the public parameterless members of any in-scope value whose type is annotated with [[Module]] (or inherits
     *     such a type), exposed as a slightly-wider scope right after the value's own scope; and
     *   - the value parameters of the immediately-enclosing method (all clauses, `implicit`/`using` ones included;
@@ -190,8 +191,8 @@ private[di] trait WiringMacrosImpl
     // boundary before any method means there are no parameters at all).
     var parametersPending = parameters.nonEmpty
     val scopes = enclosingScope.iterator.flatMap {
-      case enc: Enclosure.Class  => scopesForMembers(enc.thisRef, enc.members)
-      case enc: Enclosure.Object => scopesForMembers(Some(enc.thisRef), enc.members)
+      case enc: Enclosure.Class  => scopesForMembers(enc.thisRef, enc.members, declaredInSelfTypedClass(enc))
+      case enc: Enclosure.Object => scopesForMembers(Some(enc.thisRef), enc.members, None)
       case enc: Enclosure.Method =>
         val locals = enc.localValues.map(lv => Candidate(lv.name, lv.ref))
         if (parametersPending) {
@@ -204,15 +205,52 @@ private[di] trait WiringMacrosImpl
     (if (parametersPending) parameters :: scopes else scopes).filter(_.nonEmpty)
   }
 
-  /** Direct members of an enclosing instance form one scope; the public parameterless members of any `@Module`-typed
-    * value among them form an immediately-wider scope.
+  /** The members of an enclosing instance, ranked as in macwire (its `EligibleValuesFinder`):
+    *   1. the members declared in the class/object itself;
+    *   1. the inherited members (from parents and self-types), together with the public parameterless members of any
+    *      `@Module`-typed declared member;
+    *   1. the public parameterless members of any `@Module`-typed inherited member.
+    *
+    * Each level is a separate scope, so a declared member shadows an inherited one of the same type, and an ambiguity
+    * is reported only among candidates of the same level.
     */
-  private def scopesForMembers(self: Option[Expr_??], members: List[Method]): List[List[Candidate]] =
+  private def scopesForMembers(
+      self: Option[Expr_??],
+      members: List[Method],
+      declaredNames: Option[Set[String]]
+  ): List[List[Candidate]] =
     self.toList.flatMap { s =>
-      val direct = membersAsValues(s, members)
-      val moduleExpanded = direct.flatMap(expandIfModule)
-      if (moduleExpanded.isEmpty) List(direct) else List(direct, moduleExpanded)
+      val (declaredMembers, inheritedMembers) =
+        members.partition(m => m.isDeclared || declaredNames.exists(_.contains(m.name)))
+      val declared = membersAsValues(s, declaredMembers)
+      val inherited = membersAsValues(s, inheritedMembers)
+      List(declared, inherited ++ declared.flatMap(expandIfModule), inherited.flatMap(expandIfModule))
     }
+
+  /** The names of the members declared in an enclosing class with a self-type (`trait M { this: P => ... }`), when
+    * Hearth's `Method.isDeclared` cannot tell them apart: on Scala 2 the enclosing class's members are listed on its
+    * self type (`M with P`, so that the members `P` provides are visible), a refinement that declares nothing itself.
+    * The declared members are then read off the class among its base classes. `None` when `isDeclared` already finds
+    * declared members (always on Scala 3, which lists the members on the class itself), or no such base class exists.
+    * See `docs/research/hearth-gap-scala2-self-typed-enclosure-is-declared.md`.
+    */
+  private def declaredInSelfTypedClass(enc: Enclosure.Class): Option[Set[String]] =
+    if (enc.thisRef.isEmpty || enc.members.exists(_.isDeclared)) None
+    else
+      enc.fullName.flatMap { fullName =>
+        import enc.tpe.Underlying as T
+        Type[T].baseClasses.collectFirst {
+          case base if isClassNamed(base, fullName) && !(base.Underlying =:= Type[T]) =>
+            import base.Underlying as B
+            Class[B].unsortedMethods.collect { case m if m.isDeclared => m.name }.toSet
+        }
+      }
+
+  /** `fqcn` throws for the `NoType` base type of the refinement class itself, which is not the class looked for. */
+  private def isClassNamed(tpe: ??, fullName: String): Boolean = {
+    import tpe.Underlying as B
+    scala.util.Try(Type.fqcn[B] == fullName).getOrElse(false)
+  }
 
   /** If `value`'s type is annotated with [[Module]] (or inherits such a type), expose its public parameterless members
     * as candidate values read off `value`.
