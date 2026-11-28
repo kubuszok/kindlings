@@ -33,13 +33,22 @@ trait UserInstancesPlatform { this: MacroCommons =>
     case _ => Type[Inst].summonExprIgnoring(ignored*).toEither.left.map(reason => (reason, false))
   }
 
-  /** Whether `tpe` is a proper type (not a type constructor), so that it can have a type class instance. */
+  /** Whether `A` is a Scala 3 generic tuple (`H *: T`), handled by the modules' tuple rules. */
+  protected def isGenericTupleType[A: Type]: Boolean = this match {
+    case scala3: hearth.MacroCommonsScala3 =>
+      import scala3.quotes.reflect.*
+      UntypedType.fromTyped[A].asInstanceOf[TypeRepr].dealias.typeSymbol == Symbol.requiredClass("scala.*:")
+    case _ => false
+  }
+
+  /** Whether `tpe` is a proper type (not a type constructor nor a wildcard), so that it can have an instance. */
   protected def isProperType(tpe: ??): Boolean = this match {
     case scala3: hearth.MacroCommonsScala3 =>
       import scala3.quotes.reflect.*
       import tpe.Underlying as T
       UntypedType.fromTyped[T].asInstanceOf[TypeRepr].dealias match {
         case _: TypeLambda  => false
+        case _: TypeBounds  => false
         case _: AppliedType => true
         case other          => other.typeSymbol.typeMembers.forall(!_.isTypeParam)
       }

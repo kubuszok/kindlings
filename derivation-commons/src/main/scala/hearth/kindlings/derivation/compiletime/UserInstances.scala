@@ -73,7 +73,7 @@ trait UserInstances extends UserInstancesPlatform { this: MacroCommons & Derivat
   )(dependency: DependencyInstance[TC]): MIO[Option[Expr[TC[A]]]] =
     MIO.pure(()).flatMap { _ =>
       val typeArguments = Type.typeArguments[A]
-      if (typeArguments.isEmpty || !isStructuralDerivationTarget[A])
+      if (typeArguments.isEmpty || Type[A].isTuple || isGenericTupleType[A] || !isStructuralDerivationTarget[A])
         MIO.pure(None)
       else
         completeUserInstanceOf[TC, A](typeClass, ignored, typeArguments)(dependency)
