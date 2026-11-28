@@ -318,7 +318,7 @@ trait DiffMacrosImpl
   @scala.annotation.nowarn("msg=is never used|is unchecked")
   object SnapshotEnumRule extends SnapshotDerivationRule("Snapshot as enum") {
     def apply[A: SnapshotCtx]: MIO[Rule.Applicability[Expr[DiffResult]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumm) =>
           implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
           val defBuilder = ValDefBuilder.ofDef1[A, DiffResult](s"snapshot_${Type[A].shortName}")

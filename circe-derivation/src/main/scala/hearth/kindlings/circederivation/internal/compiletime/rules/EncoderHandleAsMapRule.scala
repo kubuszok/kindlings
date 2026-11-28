@@ -151,7 +151,7 @@ trait EncoderHandleAsMapRuleImpl {
                 }
               case _ =>
                 // 4. Try enum (all case objects) — use toString for key
-                Enum.parse[K].toOption match {
+                parseEnum[K].toOption match {
                   case Some(enumm) =>
                     val childrenList =
                       flattenedChildren[K](enumm)(_ => false) // nested case-object hierarchies are flattened

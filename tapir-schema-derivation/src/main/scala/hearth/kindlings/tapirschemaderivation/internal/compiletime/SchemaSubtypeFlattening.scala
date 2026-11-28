@@ -14,7 +14,8 @@ import hearth.kindlings.derivation.compiletime.StableChildrenOrder
   * Hearth's `Enum.directChildren` returns the direct children on Scala 3 but the leaves on Scala 2, so the
   * intermediates are recovered from the leaves' base classes (on both).
   */
-trait SchemaSubtypeFlattening { this: MacroCommons & StdExtensions & JsonSchemaConfigs =>
+trait SchemaSubtypeFlattening extends hearth.kindlings.derivation.compiletime.JavaEnumSupport {
+  this: MacroCommons & StdExtensions & JsonSchemaConfigs =>
 
   sealed trait SubtypeEntry
   object SubtypeEntry {
@@ -49,7 +50,7 @@ trait SchemaSubtypeFlattening { this: MacroCommons & StdExtensions & JsonSchemaC
   private def isNestedSum(tpe: ??): Boolean = {
     import tpe.Underlying as C
     Type[C].isSealed && !Type[C].isObject && !Type[C].isVal && !Type[C].isJavaEnum && !Type[C].isEnumeration &&
-    SingletonValue.unapply(Type[C]).isEmpty && Enum.parse[C].toOption.isDefined
+    SingletonValue.unapply(Type[C]).isEmpty && parseEnum[C].toOption.isDefined
   }
 
   private def dedupe(entries: List[(String, ??)]): List[(String, ??)] =
@@ -66,7 +67,7 @@ trait SchemaSubtypeFlattening { this: MacroCommons & StdExtensions & JsonSchemaC
     def expand(children: List[(String, ??)]): List[(String, ??)] = children.flatMap { case entry @ (_, child) =>
       import child.Underlying as C
       if (isNestedSum(child))
-        Enum.parse[C].toOption match {
+        parseEnum[C].toOption match {
           case Some(nested) =>
             expand(StableChildrenOrder.directChildren(SchemaSubtypeFlattening.this)(nested).map { case (n, c) =>
               (n, c.Underlying.as_??)

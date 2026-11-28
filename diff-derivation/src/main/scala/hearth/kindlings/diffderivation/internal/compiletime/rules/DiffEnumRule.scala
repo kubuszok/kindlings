@@ -11,7 +11,7 @@ trait DiffEnumRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
   object DiffEnumRule extends DiffDerivationRule("Diff as enum") {
 
     def apply[A: DiffCtx]: MIO[Rule.Applicability[Expr[DiffResult]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumm) =>
           implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
           val defBuilder = ValDefBuilder.ofDef2[A, A, DiffResult](s"diff_${Type[A].shortName}")

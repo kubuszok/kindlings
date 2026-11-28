@@ -73,8 +73,9 @@ nested enum's class (for a Java class nested in a class, `companionModule` is no
 
 ## 4. A Java enum read from a class file has no children until its constants are completed (Scala 3)
 
-**Status:** WORKED AROUND in jsoniter-derivation (`CodecMacros.completeJavaEnum`, Scala 3), open in Hearth - every
-other module has it.
+**Status:** WORKED AROUND in every derivation module (`derivation-commons`: `JavaEnumSupport.parseEnum`, first done in
+jsoniter-derivation as `CodecMacros.completeJavaEnum`), open in Hearth. Minimal reproducer, cause, and the related
+children-order problem: `hearth-bug-java-enum-unreferenced-constants.md`.
 
 ```scala
 // nothing else in the compilation refers to a constant of the enum

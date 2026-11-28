@@ -14,7 +14,7 @@ trait ShrinkHandleAsEnumRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdEx
 
   object ShrinkHandleAsEnumRule extends ShrinkDerivationRule("handle as enum when possible") {
     def apply[A: ShrinkCtx]: MIO[Rule.Applicability[Expr[Shrink[A]]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumData) =>
           Log.info(s"Handling ${Type[A].prettyPrint} as enum") >>
             deriveEnumShrink[A](enumData).map(Rule.matched(_))

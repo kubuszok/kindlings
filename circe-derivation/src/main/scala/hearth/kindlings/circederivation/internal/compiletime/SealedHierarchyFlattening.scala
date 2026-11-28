@@ -14,7 +14,7 @@ import hearth.kindlings.derivation.compiletime.StableChildrenOrder
   * Hearth's `Enum.directChildren` returns the direct children on Scala 3 but pre-flattened leaves on Scala 2, so the
   * user-provided intermediates are recovered from the leaves' base classes there.
   */
-trait SealedHierarchyFlattening { this: MacroCommons =>
+trait SealedHierarchyFlattening extends hearth.kindlings.derivation.compiletime.JavaEnumSupport { this: MacroCommons =>
 
   /** Nested sums are flattened for sealed traits/classes and Scala 3 enums, not for Enumerations, Java enums or union
     * types.
@@ -25,7 +25,7 @@ trait SealedHierarchyFlattening { this: MacroCommons =>
   /** A child that is itself a sum type (a sealed trait or abstract class with known children, not a singleton). */
   protected def isNestedSum[C: Type]: Boolean =
     Type[C].isSealed && !Type[C].isObject && !Type[C].isVal && !Type[C].isJavaEnum && !Type[C].isEnumeration &&
-      SingletonValue.unapply(Type[C]).isEmpty && Enum.parse[C].toOption.isDefined
+      SingletonValue.unapply(Type[C]).isEmpty && parseEnum[C].toOption.isDefined
 
   protected def isNestedSumType(tpe: ??): Boolean = {
     import tpe.Underlying as T
@@ -60,7 +60,7 @@ trait SealedHierarchyFlattening { this: MacroCommons =>
       def expand(children: List[(String, ??)]): List[(String, ??)] = children.flatMap { case entry @ (_, child) =>
         import child.Underlying as C
         if (isNestedSum[C] && !hasUserInstance(child))
-          Enum.parse[C].toOption match {
+          parseEnum[C].toOption match {
             case Some(nested) => expand(childrenOf(nested))
             case None         => List(entry)
           }

@@ -11,7 +11,7 @@ trait FastShowPrettyHandleAsEnumRuleImpl { this: FastShowPrettyMacrosImpl & Macr
 
     def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A].toEither match {
+        parseEnum[A].toEither match {
           case Right(enumm) =>
             implicit val SensitiveDataType: Type[hearth.kindlings.fastshowpretty.annotations.sensitiveData] =
               Types.SensitiveData

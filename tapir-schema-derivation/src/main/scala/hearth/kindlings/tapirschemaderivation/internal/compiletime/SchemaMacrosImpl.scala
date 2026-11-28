@@ -611,7 +611,7 @@ trait SchemaMacrosImpl
       )
 
     // Validate A is a sealed trait/enum
-    val e: Enum[A] = Enum.parse[A].toEither match {
+    val e: Enum[A] = parseEnum[A].toEither match {
       case Right(e)     => e
       case Left(reason) =>
         Environment.reportErrorAndAbort(
@@ -980,7 +980,7 @@ trait SchemaMacrosImpl
   private def unionTypeName[A: Type]: Option[String] =
     if (!Type[A].isUnionType) None
     else
-      Enum.parse[A].toOption.map { e =>
+      parseEnum[A].toOption.map { e =>
         e.directChildren.toList.map { case (_, member) => Type.plainPrint(using member.Underlying) }.mkString("_or_")
       }
 

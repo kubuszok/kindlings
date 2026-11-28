@@ -17,7 +17,7 @@ trait DecoderHandleAsEnumRuleImpl {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[XmlDecodingError, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a sealed trait/enum") >> {
-        Enum.parse[A].toEither match {
+        parseEnum[A].toEither match {
           case Right(parsedEnum) =>
             decodeEnumCases[A](parsedEnum).map(Rule.matched)
           case Left(reason) =>

@@ -227,7 +227,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                 }
               }
             case Left(_) =>
-              Enum.parse[F[Any]].toEither match {
+              parseEnum[F[Any]].toEither match {
                 case Left(reason2) =>
                   failDerivation(
                     CatsDerivationError.CannotParseEnum(

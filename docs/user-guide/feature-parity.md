@@ -11,7 +11,7 @@ subtypes are tried in, generators, `Order` across subtypes, names listed in erro
 files do not record the declaration order, so it is unknown for a sealed type from another module or one an incremental
 build did not recompile. Upstream Scala 2 derivations (shapeless, Magnolia) sort by the full name; the two orders agree
 except for numbered names (`Item2` before `Item10` vs after it) and subtypes declared in different scopes. Java enum
-constants keep their declaration order.
+constants keep their declaration order (on Scala 3 too, whichever constants the compiled code refers to).
 
 **Collections typed as an abstract collection type** (every module that builds collections: decoders, generators,
 `Monoid`/`Empty` and the like): a collection is built with the `scala.collection.Factory` that Scala's implicit search

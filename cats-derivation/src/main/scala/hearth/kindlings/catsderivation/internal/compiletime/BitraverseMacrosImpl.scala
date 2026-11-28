@@ -258,7 +258,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
                 }
               }
             case Left(_) =>
-              Enum.parse[F[Any, Any]].toEither match {
+              parseEnum[F[Any, Any]].toEither match {
                 case Left(reason2) =>
                   failDerivation(
                     CatsDerivationError.CannotParseEnum(

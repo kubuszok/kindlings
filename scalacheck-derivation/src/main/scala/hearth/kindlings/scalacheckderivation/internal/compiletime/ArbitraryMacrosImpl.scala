@@ -175,7 +175,7 @@ trait ArbitraryMacrosImpl
       case _                                        =>
         typeArgs ++ (CaseClass.parse[T].toOption match {
           case Some(caseClass) => caseClass.primaryConstructor.totalParameters.flatten.map(_._2.tpe)
-          case None => Enum.parse[T].toOption.toList.flatMap(_.directChildren.toList.map(_._2.Underlying.as_??))
+          case None => parseEnum[T].toOption.toList.flatMap(_.directChildren.toList.map(_._2.Underlying.as_??))
         })
     }
   }
