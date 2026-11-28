@@ -12,6 +12,7 @@ import io.circe.{Encoder, Json, JsonObject, KeyEncoder}
 trait EncoderMacrosImpl
     extends CirceDerivationTimeout
     with CirceDerivationPolicy
+    with hearth.kindlings.derivation.compiletime.UserInstances
     with SealedHierarchyFlattening
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl

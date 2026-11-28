@@ -140,7 +140,7 @@ trait DerivationPolicy { this: MacroCommons =>
   /** Whether deriving `A` is structural derivation (a case class, a case object, a sealed hierarchy or an enum) that is
     * not also handled as one of "the parts that always work" (collection, `Option`, `Either`, value type, tuple).
     */
-  private def isStructuralDerivationTarget[A: Type]: Boolean = {
+  protected def isStructuralDerivationTarget[A: Type]: Boolean = {
     val structural = Type[A].isCase || Type[A].isCaseObject || Enum.parse[A].toOption.isDefined
     structural && !Type[A].isTuple && !Type[A].isNamedTuple && (this match {
       case std: hearth.std.StdExtensions =>
