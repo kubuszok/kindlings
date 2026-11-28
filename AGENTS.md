@@ -242,9 +242,9 @@ Reference implementations: `di/.../WiringMacrosImpl.scala` (wiring + `wiredInMod
 `mock/.../MockMacrosImpl.scala` (`AnonymousInstance` mocks, `this.type`/ctor-arg overrides),
 `optics/.../ModifyMacrosImpl.scala` (the path DSL).
 
-The `parser` module (yacc-style grammars compiled to LALR(1) tables) is also non-derivation: it extracts the grammar
-block per Scala version (`parser/src/main/scala-{2,3}/.../GrammarMacros.scala`, see
-`docs/research/hearth-gap-destructured-local-vals.md`) into a shared IR analysed by plain-Scala compile-time code
+The `parser` module (yacc-style grammars compiled to LALR(1) tables) is also non-derivation: it reads the grammar
+block with Hearth's `DestructuredExpr` (the shared `GrammarExtractor`; the per-version `GrammarMacros` keep only code
+generation) into a shared IR analysed by plain-Scala compile-time code
 (`GrammarCompiler`, `Lalr`, `LexerBuilder`, `LL1`); `CodegenPlan` plans the generated code (per-production `reduce`,
 the `String` lexer) and `DescentPlan` the recursive-descent fast path of LL(1) grammars (`GeneratedReductions.descend`:
 it never reports errors, it throws `DescentBail` and the machine re-parses; `DescentSpec` checks both agree) that the

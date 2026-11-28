@@ -1,6 +1,6 @@
 # Kindlings: Remaining Gaps & Action Items
 
-Last updated: 2026-06-06.
+Last updated: 2026-11-28.
 
 Legend: **P1** = important for migrating users, **P2** = nice to have / quality.
 
@@ -70,29 +70,8 @@ more module/wrapper combinations.
 |---|---|---|
 | jsoniter | `decodingOnly + encodingOnly compile error` in `compileErrors()` context | Works in real usage. |
 | tapir | Scala 2 tapir-schema tests broken | Pre-existing Hearth issue with Scala 2 type identity. |
-| di-cats | No Hearth `Ctor` for mixed kinds (`Resource[F[_], A]`) — Hearth feedback item 11 | Open in Hearth (no ETA); `isResource`/`resourceUnderlying` recognise `Resource` by FQCN + `decompose2`. |
+| di-cats | No Hearth `Ctor` for mixed kinds (`Resource[F[_], A]`) — item 11 of the 2026-10 Hearth feedback | Open in Hearth (no ETA); `isResource`/`resourceUnderlying` recognise `Resource` by FQCN + `decompose2`. |
 | circe | Scala 3: `semiEval` cannot evaluate the default arguments of the `KindlingsEncoder`/`KindlingsDecoder`/`KindlingsCodecAsObject` companions (their inline accessors take a package parameter, so `getMethods` throws `NoClassDefFoundError`, now a `Left`); lazy local vals (`given`) are skipped by design | Named-argument `derive(...)` configurations are runtime ones and `deriveEnum` stays an overload; `SemiEvalConfigScala3` follows lazy local vals — see `hearth-gap-semieval-named-args.md`. |
 
-### Resolved
-
-| Issue | Resolution |
-|---|---|
-| Scala 3: `ValDefs` vals / `LambdaBuilder` lambdas created in the splice of a quoted lambda got the macro expansion as owner ("Block contains definition with different owners") | **RESOLVED** in Hearth `90383964` (`0.4.4-13-g9038396-SNAPSHOT`; the first attempt `d62d007e` was reverted); the circe (`val json` in `deriveAsObject`, key encoding inside the map pair lambda), pureconfig (`bindAll`, `firstSuccess`), sconfig (`firstSuccess`) and yaml (`toYamlString`'s `val node`) workarounds are gone — see `hearth-gap-lambda-owner-in-val-splice.md`. |
-| Annotation extraction (#283) | **Fixed in Hearth 0.3.1-45** — `annotationTypes` / `annotationsOfType` / `hasAnnotationOfType` / `Annotations.decodedConstructorArguments`. Kindlings already migrated off the workaround (shared `AnnotationSupport` is native-API-backed convenience only). Gap doc deleted 2026-06-15. |
-| HKT ctor primitives, first-order (#284) | **Fixed in Hearth 0.3.1-45** — `decompose1/2` + `CtorK1` + summon. `cats-derivation` migrated off the bridges. The higher-order `CtorK1`-argument case (`cats-tagless`) is **resolved too** (2026-10-25, Hearth 0.4.3 `UntypedType.dealias`/`typeArguments`/`typeConstructor`/`applyTypeArgs`; `TaglessKBridgeScala{2,3}` deleted) — see `hearth-gap-hkt-ctor-primitives.md`. The Scala 2 entry glue (`Type.Ctor1.of[F]`/`CtorK1.of[Alg]` broken for a macro's own type parameter) is **resolved** by kubuszok/hearth#389: all Scala 2 entry points now call `Type.CtorN.of[F]` / `Type.CtorK1.of[Alg]` — see `hearth-gap-scala2-ctor-of-macro-type-param.md`. |
-| `Type.of` bootstrap cycle in extensions (#285) | **Fixed in Hearth 0.3.1-45** — self-referential `implicit val …: Type[A] = Type.of[A]` now works in cross-quotes inside a `StandardMacroExtension`. circe + jsoniter field-config extensions migrated off the bypass (and the per-platform scala-2/scala-3 pairs collapsed into one shared file each). Gap doc deleted 2026-06-15. |
-| Generic method return type after `ApplyTypes` (`Nothing` on Scala 2); cross-quotes `Type.of` before `import x.Underlying`; no `isFunction`/`isContextFunction` | **Resolved by kubuszok/hearth#389** (Hearth 0.4.4, verified against `0.4.3-24-gc0c6e43-SNAPSHOT`) — di-cats reads `knownReturning` directly, `preciseDependency` uses the natural import order, di/di-cats use the function predicates. See `hearth-gap-method-generic-return-type.md`, `hearth-gap-cross-quotes-import-order.md`. |
-| Hearth feedback 2026-10, items 1-10 (`docs/research/hearth-feedback-2026-10/`) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (released in 0.4.4); Kindlings pins that snapshot and dropped every workaround. Item 11 stays open (see Known Bugs). |
-| Scala 2 `UntypedType.parents` `Nil` for applied generic classes (`baseClasses` with unresolved type params) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4); di/di-cats detect factories with `!parents.exists(_.isFunction)` again — see `hearth-gap-scala2-parents-generic-classes.md`. |
-| Enclosing-method parameters not exposed (feedback item 4) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4, `Environment.enclosingMethodParameters`); `DI.wire` & co. now use them as the innermost scope on Scala 2 and 3 (`WiringSpec` "DI.wire enclosing-method parameters"). |
-| `VarArgs.toIterable` silently drops non-literal varargs (feedback item 8) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4, `VarArgs.toIterableOption`); optics uses it — see `hearth-gap-varargs-non-literal.md`. |
-| Path-dependent type prefix / type members (feedback item 9) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4, `Type.pseudoCompanionObject`); newtype/neotype integrations use it — see `hearth-gap-type-prefix-and-members.md`. |
-| `Ctor2.of[Function1].unapply` on subtypes, Scala 3 (feedback item 7) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4); cats-derivation uses plain `Type.Ctor2.of[Function1]`. |
-| `decompose1/2`/`typeArguments` on singleton types (feedback item 3) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4); no Kindlings workaround existed (di-cats widens dependencies through `DestructuredExpr`). |
-| `semiEval` named arguments, local vals/proxies, `var`s, same-module members, unrunnable lambdas; Scala 2 literal types in lambdas; named tuples behind aliases | **RESOLVED** in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (0.4.4, kubuszok/hearth#396/#401); jsoniter/ubjson `semiEvalConfig` overrides, `SemiEvalConfigScala2` and `Scala2LiteralFieldsGapSpec` removed — see `hearth-gap-semieval-*.md`, `hearth-gap-scala2-literal-parameter-types.md`, `hearth-gap-named-tuple-aliases.md`. |
-| Hearth `0.4.3-79` feedback: Scala 2 `Type.of` self-reference in an `object` of a macro bundle (`null`); Scala 2 `Type.CtorN.unapply` of an alias inherited from a trait; Scala 3 annotations of parameterless enum cases; `semiEval` letting `NoClassDefFoundError` escape ("already defined"); Scala 2 backend crash splicing a default getter call into a by-name parameter | **RESOLVED** in Hearth `0.4.3-90-gc3f9223-SNAPSHOT` (0.4.4, kubuszok/hearth#402). The map rules define their pair types with `Type.of` again, cats-integration matches `Type.Ctor1.of[cats.data.NonEmptyLazyList]`, `EnumCaseAnnotations` is removed, `SemiEvalConfigScala3` no longer refuses default getters, and `defaultingDecoder` is by-name again — see `hearth-gap-scala2-type-of-self-reference.md`, `hearth-gap-ctor-unapply-alias-in-trait.md`, `hearth-gap-enum-case-annotations.md`, `hearth-gap-semieval-named-args.md`, `hearth-gap-scala2-splice-into-by-name-param.md`. |
-| Splice isolation: `Option[SealedTrait]` on Scala 3 | Fixed in Hearth 0.4.0. |
-| Default values for generic case classes on Scala 3 | Fixed in Hearth 0.3.0-94. |
-| Scala 2 anonymous instance scope | Fixed in Hearth 0.3.0-96. |
-| `Expr.summonImplicit` cross-file type identity | Fixed via scalac setting fallback + `freshConfigType`. |
-| `semiEval` inline parameter opacity | Workaround: runtime branching. |
+Resolved items (Hearth fixes and the Kindlings workarounds they made unnecessary) are in the git history of this
+file and of `docs/research/`.

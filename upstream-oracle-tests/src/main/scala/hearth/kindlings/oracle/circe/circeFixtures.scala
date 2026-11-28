@@ -3,8 +3,8 @@ package hearth.kindlings.oracle.circe
 // Fixtures of the circe oracle (prefixed `Ci`). They are top-level and have no companion instances, so that the
 // Kindlings side and the upstream side each derive them with their own configuration. They live in the main sources so
 // that the tests always see them from the classpath, like users deriving instances for types of another module: Hearth
-// used to report the subtypes of such types in another order (fixed in Hearth 1bba7e2b, see
-// docs/research/hearth-bug-children-order-from-classpath.md), and this keeps that case covered.
+// used to report the subtypes of such types in another order (fixed in Hearth 1bba7e2b), and this keeps that case
+// covered.
 
 final case class CiPerson(firstName: String, age: Int, nickName: Option[String])
 

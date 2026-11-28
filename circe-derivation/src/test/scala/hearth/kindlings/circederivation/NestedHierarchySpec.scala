@@ -6,8 +6,7 @@ import io.circe.{Decoder, Encoder, Json}
 /** A sealed hierarchy with a case object in the companion of the sealed trait, nested in an object and in a class.
   *
   * The class-nested variant (as in a test suite or a `.sc` script) crashed the Scala 3 compiler with "missing outer
-  * accessor" on Hearth 0.4.5, which typed the case object as `Shape.this.Empty$` - see
-  * `docs/research/hearth-bug-enum-child-this-type-prefix.md` (fixed in Hearth 985e5e6).
+  * accessor" on Hearth 0.4.5, which typed the case object as `Shape.this.Empty$` (fixed in Hearth 985e5e6).
   *
   * Only the ENCODER is derived for the class-nested variant: on Scala 2 a decoder (which refers to the case object's
   * value) still fails with "unable to find the outer accessor symbol", because Hearth's `Expr.singletonOf` refers to

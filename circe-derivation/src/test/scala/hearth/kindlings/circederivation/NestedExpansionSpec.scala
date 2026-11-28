@@ -5,8 +5,8 @@ import io.circe.{Encoder, Json}
 
 // Deriving `NeRoot` reads the children of the sealed `NeLevel`; on Scala 2 that makes the compiler complete the other
 // members of this package, and type `NeUntyped.http` (whose type is inferred) by expanding its macro INSIDE the first
-// expansion. Hearth 0.4.5 failed that nested, independent expansion with "MIO timeout is already set" - see
-// docs/research/hearth-bug-mio-timeout-reentry.md (fixed in Hearth 985e5e6).
+// expansion. Hearth 0.4.5 failed that nested, independent expansion with "MIO timeout is already set" (fixed in
+// Hearth 985e5e6).
 final case class NeHttp(port: Int)
 final case class NeRoot(http: NeHttp, level: NeLevel)
 sealed trait NeLevel

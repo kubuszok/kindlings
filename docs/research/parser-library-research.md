@@ -24,8 +24,7 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
   `all(...) { ... }` (effectful) and `.pure { ... }`, `||`, inline literals (singleton values, `""` as the empty
   alternative) and inline `"...".r` regexes, `.map` on terminals, inline groups, `opt`/`rep`/`rep1`/`sepBy`/`sepBy1`,
   `left`/`right`/`nonassoc` + `.prec`, `skip`.
-- A macro that extracts the grammar (raw compiler trees per Scala version, see
-  `docs/research/hearth-gap-destructured-local-vals.md`), then shared, compiler-independent analysis:
+- A macro that extracts the grammar (with Hearth's `DestructuredExpr`, in the shared `GrammarExtractor`), then shared, compiler-independent analysis:
   - a regex subset parser and a lexer DFA with longest match and literal-over-regex priority;
   - LALR(1) tables with yacc-style precedence;
   - diagnostics reported at the offending production: shift/reduce and reduce/reduce conflicts with the LR state,

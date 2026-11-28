@@ -3,8 +3,8 @@ package hearth.kindlings.fastshowpretty
 import hearth.MacroSuite
 
 /** A sealed hierarchy nested in a class with a case object in the companion of the sealed trait: crashed the Scala 3
-  * compiler with "missing outer accessor" on Hearth 0.4.5 - see
-  * `docs/research/hearth-bug-enum-child-this-type-prefix.md` (fixed in Hearth 985e5e6).
+  * compiler with "missing outer accessor" on Hearth 0.4.5, which typed the case object as `Shape.this.Empty$` (fixed in
+  * Hearth 985e5e6).
   */
 final class NestedHierarchySpec extends MacroSuite {
 

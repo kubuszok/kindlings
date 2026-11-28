@@ -55,7 +55,8 @@ object Codecs {
 The same class without default values derives and works (encoding, decoding and construction go through the path
 `NestedDefaults.User`), so it is the default value's expression (`Parameter` default / `$lessinit$greater$default$N`)
 which refers to the companion through `NestedDefaults.this` (the trait's `this`) rather than through the prefix of the
-type. Same family as `hearth-bug-enum-child-this-type-prefix.md`. Scala 2.13 fails as well, with
+type. Same family as the `Shape.this.Empty$` type prefix bug fixed in Hearth 985e5e6
+(and `hearth-bug-scala2-singleton-this-prefix.md`). Scala 2.13 fails as well, with
 `Internal error: unable to find the outer accessor symbol of object Codecs`.
 
 ## 3. A Java enum nested in a Java class cannot be derived on Scala 3

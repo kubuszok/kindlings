@@ -28,8 +28,7 @@ Separately, `SummoningResult.NotFound` drops the reason of the failure. On Scala
 (`ImplicitSearchFailure.explanation`) tells a candidate whose macro **threw** (`Exception occurred while executing
 macro expansion. java.lang.IllegalStateException: ...`) from a candidate that does not apply; a derivation should fail
 on the former instead of deriving the type structurally. (Kindlings 0.4.0 hit this with Hearth 0.4.5's "MIO timeout is
-already set" in a nested expansion, see `hearth-bug-mio-timeout-reentry.md`: the assertion error was read as "not
-found".)
+already set" in a nested expansion (fixed in Hearth 985e5e6): the assertion error was read as "not found".)
 
 ## Workarounds in Kindlings
 

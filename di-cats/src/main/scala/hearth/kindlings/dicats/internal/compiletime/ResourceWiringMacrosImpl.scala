@@ -660,8 +660,7 @@ private[dicats] trait ResourceWiringMacrosImpl
     *
     * Since Hearth 0.4.4 (kubuszok/hearth#389) the `Method` chain knows a generic method's return type as soon as its
     * type arguments are applied, on both platforms - so it is read directly instead of trial-applying the remaining
-    * clauses with placeholders (which on Scala 2 used to yield `Nothing`, see
-    * `docs/research/hearth-gap-method-generic-return-type.md`).
+    * clauses with placeholders (which on Scala 2 used to yield `Nothing`, before Hearth 0.4.4).
     */
   private def returnsResourceOf[F[_], X](applied: Method)(implicit resourceFX: Type[Resource[F, X]]): Boolean =
     applied.knownReturning.exists { rt =>
