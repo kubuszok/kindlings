@@ -43,7 +43,7 @@ object PureConfigWideGenericTupleInstances {
   val writer: KindlingsConfigWriter[T30] = KindlingsConfigWriter.derived[T30]
 
   val value: T30 = Tuple
-    .fromArray(Array.tabulate[Object](30)(i => if (i % 2 == 0) Int.box(i) else s"s$i"))
+    .fromArray(Array.tabulate[Object](30)(i => if i % 2 == 0 then Int.box(i) else s"s$i"))
     .asInstanceOf[T30]
 }
 

@@ -13,7 +13,7 @@ trait GenericTuples { this: MacroCommons =>
 
   /** The element types of a tuple that is not a `TupleN` case class, `None` for any other type (named tuples too). */
   protected def genericTupleElementTypes[A: Type]: Option[List[??]] =
-    if (!Type[A].isTuple || Type[A].isNamedTuple) None
+    if !Type[A].isTuple || Type[A].isNamedTuple then None
     else
       this match {
         case scala3: hearth.MacroCommonsScala3 =>
@@ -35,7 +35,7 @@ trait GenericTuples { this: MacroCommons =>
           unfold(tpe) match {
             // a `TupleN` is handled by `CaseClass`
             case AppliedType(tycon, _) if defn.isTupleClass(tycon.typeSymbol) => None
-            case _                                                             =>
+            case _                                                            =>
               loop(tpe).map(_.map(t => UntypedType.as_??(t.asInstanceOf[UntypedType])))
           }
         case _ => None
