@@ -65,6 +65,7 @@ val specsCallingCompileTimeApisDirectly: Set[String] = Set(
   "hearth.kindlings.derivation.compiletime.DerivationPolicySpec",
   "hearth.kindlings.derivation.compiletime.DerivationTimeoutSpec",
   "hearth.kindlings.derivation.compiletime.StableChildrenOrderSpec",
+  "hearth.kindlings.derivation.compiletime.UserInstancesSpec",
   "hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHintsSpec",
   "hearth.kindlings.di.WiringGraphSpec",
   "hearth.kindlings.tapirschemaderivation.internal.compiletime.PreferSchemaConfigHintSpec",
