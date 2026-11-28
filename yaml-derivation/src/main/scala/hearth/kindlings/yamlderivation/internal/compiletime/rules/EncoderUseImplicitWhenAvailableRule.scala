@@ -19,6 +19,13 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
         case method if method.isImplicit => method.asUntyped
       }
 
+    /** scala-yaml's `YamlEncoder.forMap` is not used for a map: Kindlings derives maps itself, so that keys go through
+      * their key codecs (`YamlKeyEncoder`) instead of scala-yaml's `YamlEncoder[K]` (a user-provided instance for the
+      * whole map type is still used).
+      */
+    lazy val ignoredImplicitsAndScalaYamlMaps: Seq[UntypedMethod] =
+      ignoredImplicits ++ Type.of[org.virtuslab.yaml.YamlEncoder.type].unsortedMethodsNamed("forMap").map(_.asUntyped)
+
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[org.virtuslab.yaml.Node]]] =
       Log.info(s"Attempting to use implicit YamlEncoder for ${Type[A].prettyPrint}") >> {
         if (ectx.derivedType.exists(_.Underlying =:= Type[A]))
@@ -26,7 +33,7 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
             Rule.yielded(s"The type ${Type[A].prettyPrint} is the type being derived, skipping implicit search")
           )
         else
-          Types.YamlEncoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
+          Types.YamlEncoder[A].summonExprIgnoring(ignoredImplicitsAndScalaYamlMaps*).toEither match {
             case Right(instanceExpr) => cacheAndUse[A](instanceExpr)
             case Left(reason)        => yieldUnsupported[A](reason)
           }

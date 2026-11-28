@@ -51,6 +51,22 @@ final class RefinedYamlSpec extends MacroSuite {
       }
     }
 
+    group("map keys") {
+
+      test("refined keys are validated: a rejected key is a decoding failure") {
+        val valid = mappingOf("values" -> mappingOf("a" -> scalarNode("1")))
+        val decoded = KindlingsYamlDecoder.decode[WithRefinedKeyMap](valid)
+        assertEquals(decoded.map(_.values.map { case (k, v) => k.value -> v }), Right(Map("a" -> 1)))
+        KindlingsYamlEncoder.encode(decoded.toOption.get) ==> valid
+        val empty =
+          KindlingsYamlDecoder.decode[WithRefinedKeyMap](mappingOf("values" -> mappingOf("" -> scalarNode("1"))))
+        assert(empty.isLeft, s"Expected Left but got $empty")
+        val negative =
+          KindlingsYamlDecoder.decode[WithRefinedIntKeyMap](mappingOf("values" -> mappingOf("-1" -> scalarNode("1"))))
+        assert(negative.isLeft, s"Expected Left but got $negative")
+      }
+    }
+
     group("round-trip") {
 
       test("encode then decode preserves value") {

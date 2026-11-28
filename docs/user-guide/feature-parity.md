@@ -1446,7 +1446,7 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 | Value classes | No: not derivable (no `Mirror` for a value class) | Automatic unwrapping | Improvement |
 | `private val` constructor fields | Written and read | Written (read by position) and read | Parity |
 | Collections, `Option`s and maps of derived types | Through the element's `given` instance | Derived in place; same nodes and same failures (`Could't construct scala.collection.immutable.List from ...`, also for a null) | Parity |
-| Map keys | Any type with an instance (`forMap[K, V]`); `String` keys reject a null and non-scalars, and are written with non-printable characters escaped | The same; keys without an instance are derived (e.g. value classes) | Parity / Improvement |
+| Map keys | Any type with an instance (`forMap[K, V]` uses the ordinary `YamlDecoder[K]` / `YamlEncoder[K]`); `String` keys reject a null and non-scalars, and are written with non-printable characters escaped; numbers read as `YamlDecoder.forInt` etc. read them | Key codecs `YamlKeyDecoder` / `YamlKeyEncoder` (user-provided, built in for `String`, `Char`, `Boolean`, numbers, `BigInt`, `BigDecimal`, `UUID`, derived for enums of case objects by name and value types with validation); the same scalars, nulls, escaping and number parsing (and failures) as scala-yaml; complex keys without a key codec use their `YamlDecoder` / `YamlEncoder` | Difference (see below) / Improvement |
 | `Char` fields | Encoder only | Encoder and decoder | Improvement |
 | `BigInt` / `BigDecimal` fields | Decoder only | Decoder (scala-yaml's) and encoder | Improvement |
 | `Any`, `Map[Any, Any]` fields | Decoder only (`YamlDecoder.forAny`: tags, aliases, precise doubles) | The same instance is used | Parity |
@@ -1471,11 +1471,12 @@ the position, `expected`): numbers (ranges, octal/hexadecimal, underscores, non-
 (`!!null` for a non-optional field), sequences, mappings, nested case classes, user-provided codecs, default
 parameters (evaluated lazily, on every use), `Any`, more than 4 fields, collections / options / maps of derived types
 with nodes of the wrong kind, maps with `Int` keys, big numbers, generic case classes, private constructor fields,
-tuples and `Either`. The only difference:
+tuples, `Either`, and map keys (user-provided `String` / `Int` instances in scope). The differences:
 
 | Difference | scala-yaml | Kindlings | Status |
 |---|---|---|---|
 | Fields after a failing field | Every field is decoded (and the defaults of absent fields are evaluated), then the first failure is reported | The same failure; later fields are not decoded and their defaults are not evaluated | Design decision (no work after a failure) |
+| Instances used for map keys | `forMap` uses the ordinary `YamlDecoder[K]` / `YamlEncoder[K]`, so e.g. a custom `YamlDecoder[String]` also changes `String` keys | Key codecs (`YamlKeyDecoder[K]` / `YamlKeyEncoder[K]`, as circe's `KeyDecoder` and jsoniter-scala's `JsonKeyCodec`); a `YamlDecoder[K]` / `YamlEncoder[K]` is used for keys only when `K` has no key codec (complex keys). Keys are scalars, so a node codec is the wrong abstraction for them, and enum / value type keys get derived codecs | Design decision (since the release after 0.4.0; before, keys used the `YamlDecoder[K]` except `String` keys of maps of derived values) |
 
 The suites also check that the opt-ins differ as intended:
 

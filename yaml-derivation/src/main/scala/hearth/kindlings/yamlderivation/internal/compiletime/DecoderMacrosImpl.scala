@@ -472,7 +472,7 @@ trait DecoderMacrosImpl
         val decoder: MIO[Expr[YamlDecoder[Field]]] =
           DTypes
             .YamlDecoder[Field]
-            .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
+            .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicitsAndScalaYamlMaps*)
             .toEither match {
             case Right(decoderExpr) =>
               Log.info(s"Found implicit YamlDecoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
@@ -506,6 +506,8 @@ trait DecoderMacrosImpl
 
     def YamlDecoder: Type.Ctor1[YamlDecoder] = Type.Ctor1.of[YamlDecoder]
     def KindlingsYamlDecoder: Type.Ctor1[KindlingsYamlDecoder] = Type.Ctor1.of[KindlingsYamlDecoder]
+    def YamlKeyDecoder: Type.Ctor1[hearth.kindlings.yamlderivation.YamlKeyDecoder] =
+      Type.Ctor1.of[hearth.kindlings.yamlderivation.YamlKeyDecoder]
     val DecoderLogDerivation: Type[hearth.kindlings.yamlderivation.KindlingsYamlDecoder.LogDerivation] =
       Type.of[hearth.kindlings.yamlderivation.KindlingsYamlDecoder.LogDerivation]
     val Node: Type.Lazy[Node] = Type.Lazy(Type.of[Node])
@@ -522,6 +524,7 @@ trait DecoderMacrosImpl
     val Char: Type.Lazy[Char] = Type.Lazy(Type.of[Char])
     val BigDecimal: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
     val BigInt: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
+    val UUID: Type.Lazy[java.util.UUID] = Type.Lazy(Type.of[java.util.UUID])
     val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
     val EitherCEAny: Type.Lazy[Either[ConstructError, Any]] = Type.Lazy(Type.of[Either[ConstructError, Any]])

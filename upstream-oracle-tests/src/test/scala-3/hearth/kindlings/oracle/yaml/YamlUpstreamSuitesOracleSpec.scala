@@ -99,6 +99,9 @@ final case class YuContainers(
     map: Map[String, YuPort]
 )
 final case class YuIntKeys(byId: Map[Int, YuPort])
+// user-provided String / Int instances: scala-yaml's forMap uses them for keys too (it has no key type class), Kindlings
+// reads and writes keys with key codecs (YamlKeyDecoder / YamlKeyEncoder)
+final case class YuUserKeys(name: String, ports: Map[String, YuPort], counts: Map[String, Int], byId: Map[Int, YuPort])
 final case class YuBigs(int: BigInt, decimal: BigDecimal)
 final case class YuGeneric[A](value: A, items: List[A] = Nil, label: String = "generic")
 final case class YuTree(value: Int, children: List[YuTree])
@@ -196,6 +199,27 @@ final class YamlUpstreamSuitesOracleSpec extends MacroSuite {
     val priv: YamlCodec[YuPrivate] = YamlCodec.derived
     val tuple: YamlCodec[(Int, String)] = YamlCodec.derived
     val either: YamlCodec[Either[YuPort, YuRedis]] = YamlCodec.derived
+  }
+
+  // A user-provided YamlDecoder / YamlEncoder for String and Int in scope of both derivations.
+  private object UserKeyInstances {
+    given upperCase: YamlDecoder[String] = YamlDecoder.forString.mapError { s =>
+      if s.isEmpty then Left(ConstructError.from("empty key")) else Right(s.toUpperCase)
+    }
+    given prefixed: YamlEncoder[String] = YamlEncoder.forString.mapContra[String]("k-" + _)
+    given plusOne: YamlDecoder[Int] = YamlDecoder.forInt.map(_ + 1)
+    given timesTen: YamlEncoder[Int] = YamlEncoder.forInt.mapContra[Int](_ * 10)
+  }
+  private object KUserKeys {
+    import UserKeyInstances.given
+    given YamlConfig = YamlConfig.default
+    val userKeys: YamlCodec[YuUserKeys] =
+      YamlCodec.make(KindlingsYamlDecoder.derived[YuUserKeys], KindlingsYamlEncoder.derived[YuUserKeys])
+  }
+  private object UUserKeys {
+    import UserKeyInstances.given
+    given port: YamlCodec[YuPort] = YamlCodec.derived
+    val userKeys: YamlCodec[YuUserKeys] = YamlCodec.derived
   }
 
   // --- helpers -------------------------------------------------------------------------------------------------------
@@ -698,6 +722,38 @@ final class YamlUpstreamSuitesOracleSpec extends MacroSuite {
       assert(compileErrors("YamlCodec.derived[YuWrapper]").contains("it is a value class"))
       assertEquals(K.wrapped.asNode(YuWrapped(YuWrapper(1))).asYaml, "id: 1\n")
       assertDecodes(K.wrapped, "id: 1", YuWrapped(YuWrapper(1)))
+    }
+
+    test("map keys: scala-yaml uses YamlDecoder[K] / YamlEncoder[K], Kindlings key codecs (documented difference)") {
+      val yaml = "name: n\nports: {a: {port: 1}}\ncounts: {c: 3}\nbyId: {4: {port: 5}}"
+      // the fields and values take the user-provided instances on both sides
+      assertDecodes(
+        UUserKeys.userKeys,
+        yaml,
+        YuUserKeys("N", Map("A" -> YuPort(2)), Map("C" -> 4), Map(5 -> YuPort(6)))
+      )
+      // Kindlings: keys with the built-in key codecs (a user-provided YamlKeyDecoder / YamlKeyEncoder would be used)
+      assertDecodes(
+        KUserKeys.userKeys,
+        yaml,
+        YuUserKeys("N", Map("a" -> YuPort(2)), Map("c" -> 4), Map(4 -> YuPort(6)))
+      )
+      val value = YuUserKeys("n", Map("a" -> YuPort(1)), Map("c" -> 3), Map(4 -> YuPort(5)))
+      assertEquals(
+        UUserKeys.userKeys.asNode(value).asYaml,
+        "name: k-n\nports: \n  k-a: \n    port: 10\ncounts: \n  k-c: 30\nbyId: \n  40: \n    port: 50\n"
+      )
+      assertEquals(
+        KUserKeys.userKeys.asNode(value).asYaml,
+        "name: k-n\nports: \n  a: \n    port: 10\ncounts: \n  c: 30\nbyId: \n  4: \n    port: 50\n"
+      )
+      // the keys that both reject are rejected with the same failures
+      compareDecoded(KUserKeys.userKeys, UUserKeys.userKeys)(
+        "name: n\nports: {~: {port: 1}}\ncounts: {}\nbyId: {}",
+        "name: n\nports: {[1]: {port: 1}}\ncounts: {}\nbyId: {}",
+        "name: n\nports: {a: {port: x}}\ncounts: {}\nbyId: {}",
+        "name: n\nports: {}\ncounts: {}\nbyId: {x: {port: 1}}"
+      )()
     }
 
     test("maps with keys that are not strings, of derived values") {

@@ -143,6 +143,56 @@ results, read when the instance runs; a derived encoder/decoder then computes th
 `KindlingsYamlDecoder.decode` have no instance and compute them on every call), and resolves the instances of its fields and subtypes (e.g. an
 `implicit def` `YamlEncoder`) once per instance, not on every call.
 
+## Map keys
+
+The keys of a YAML mapping are scalars, so maps derived by Kindlings read and write their keys with **key codecs**,
+`YamlKeyDecoder[K]` (`String => Either[ConstructError, K]`) and `YamlKeyEncoder[K]` (`K => String`), as circe's
+`KeyDecoder` / `KeyEncoder` and jsoniter-scala's `JsonKeyCodec` do. For a key type `K`, Kindlings looks for:
+
+1. a `YamlKeyDecoder[K]` / `YamlKeyEncoder[K]` in implicit scope (yours always wins, also for `String`);
+2. a built-in one: `String`, `Char`, `Boolean`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`, `BigInt`,
+   `BigDecimal`, `java.util.UUID` (numbers and booleans are read as scala-yaml reads them: `0x10`, `0o17`, `1_000`);
+3. a derived one: enums of case objects (Scala 3 enums, Java enums, `scala.Enumeration`, sealed traits of case objects)
+   by the names of their cases (after `transformConstructorNames`), and value types (`AnyVal`, Scala 3 opaque types,
+   refined / Iron / neotype types) over a type with a key codec. A value type's smart constructor validates the key:
+   a rejected key is a decoding failure, reported at the key;
+4. otherwise `K` is a complex (non-scalar) key: it is read and written with its `YamlDecoder[K]` / `YamlEncoder[K]`
+   (yours, or a derived one, e.g. a case class written as a mapping), as scala-yaml does for every key.
+
+If none of them applies, the derivation fails with `No YamlKeyDecoder[K] for the map's keys: ...`.
+
+A `YamlDecoder[K]` / `YamlEncoder[K]` is **not** used for a key type that has a key codec: a custom `YamlDecoder[String]`
+changes `String` fields and values, not `String` keys (scala-yaml's `forMap` would use it for keys too). Provide a
+`YamlKeyDecoder[K]` / `YamlKeyEncoder[K]` to change how keys are read and written; `YamlKeyDecoder` has `map` and `emap`,
+`YamlKeyEncoder` has `contramap`, and both companions have `instance` and the built-in instances to build on.
+
+```scala
+//> using scala {{ scala.2_13 }}
+//> using dep com.kubuszok::kindlings-yaml-derivation:{{ kindlings_version() }}
+//> using dep org.virtuslab::scala-yaml:{{ libraries.scalaYaml }}
+
+import hearth.kindlings.yamlderivation._
+
+sealed trait Color
+case object Red extends Color
+case object Green extends Color
+
+final case class UserId(value: String) extends AnyVal
+object UserId {
+  implicit val keyDecoder: YamlKeyDecoder[UserId] =
+    YamlKeyDecoder.forString.emap(s => if (s.startsWith("u-")) Right(UserId(s)) else Left(s"Not a user id: $s"))
+}
+
+case class Inventory(byColor: Map[Color, Int], byUser: Map[UserId, Int])
+
+println(KindlingsYamlDecoder.fromYamlString[Inventory]("byColor:\n  Red: 1\nbyUser:\n  u-1: 2"))
+// expected output:
+// Right(Inventory(Map(Red -> 1),Map(UserId(u-1) -> 2)))
+println(KindlingsYamlDecoder.fromYamlString[Inventory]("byColor:\n  Blue: 1\nbyUser: {}").left.map(_.msg.linesIterator.next()))
+// expected output:
+// Left(Unknown key Blue. Expected one of: Green, Red)
+```
+
 ## Annotations
 
 | Annotation | Description |
@@ -263,7 +313,7 @@ scalacOptions += "-Xmacro-settings:yamlDerivation.logDerivation=true"
 | Default value expressions | Evaluated only when the field is absent, on every such decode | Same |
 | `private val` constructor fields | Written and read | Same |
 | Collections, maps and `Option`s of derived types | Through the element's `given` instance | Derived in place, with the same results and failures (`Could't construct scala.collection.immutable.List from ...`) |
-| Map keys | Any type with an instance | `String` and any type with an instance or derivable (numbers, value classes, ...) |
+| Map keys | Any type with a `YamlDecoder` / `YamlEncoder` (no key type class: a custom `YamlDecoder[String]` applies to keys too) | Key codecs (`YamlKeyDecoder` / `YamlKeyEncoder`, see [Map keys](#map-keys)): built in for scalars, derived for enums of case objects and value types; `YamlDecoder` / `YamlEncoder` only for complex keys |
 | After a failing field | Every field is decoded, the first failure is reported | The first failure is reported; later fields are not decoded (their defaults are not evaluated) |
 | Recursive types | `derives` / a `given` never finishes initializing | Yes |
 | Value classes | Not derivable (no `Mirror`) | Unwrapped |

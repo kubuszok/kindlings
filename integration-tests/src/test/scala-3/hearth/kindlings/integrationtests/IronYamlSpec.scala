@@ -2,6 +2,7 @@ package hearth.kindlings.integrationtests
 
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
+import io.github.iltotore.iron.constraint.string.*
 import hearth.MacroSuite
 import hearth.kindlings.yamlderivation.{KindlingsYamlDecoder, KindlingsYamlEncoder}
 import org.virtuslab.yaml.Node
@@ -40,6 +41,28 @@ final class IronYamlSpec extends MacroSuite {
         val node = mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("-1"))
         val result = KindlingsYamlDecoder.decode[IronPerson](node)
         assert(result.isLeft, s"Expected Left but got $result")
+      }
+    }
+
+    group("map keys") {
+
+      test("iron String keys (a subtype of String) are validated, not read as a plain String") {
+        val valid = mappingOf("values" -> mappingOf("a" -> scalarNode("1")))
+        KindlingsYamlDecoder.decode[WithIronKeyMap](valid) ==> Right(
+          WithIronKeyMap(Map(("a": String :| Not[Blank]) -> 1))
+        )
+        val blank = mappingOf("values" -> mappingOf(" " -> scalarNode("1")))
+        val result = KindlingsYamlDecoder.decode[WithIronKeyMap](blank)
+        assert(result.isLeft, s"Expected Left but got $result")
+        KindlingsYamlEncoder.encode(WithIronKeyMap(Map(("a": String :| Not[Blank]) -> 1))) ==> valid
+      }
+
+      test("iron Int keys are validated") {
+        val result =
+          KindlingsYamlDecoder.decode[WithIronIntKeyMap](mappingOf("values" -> mappingOf("-1" -> scalarNode("1"))))
+        assert(result.isLeft, s"Expected Left but got $result")
+        KindlingsYamlDecoder.decode[WithIronIntKeyMap](mappingOf("values" -> mappingOf("2" -> scalarNode("1")))) ==>
+          Right(WithIronIntKeyMap(Map((2: Int :| Positive) -> 1)))
       }
     }
   }
