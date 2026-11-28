@@ -123,6 +123,18 @@ object PureConfigDerivationUtils {
       case left => left
     }
 
+  /** [[tupleListCursor]] for the Scala 3 tuples which are not a `TupleN` (`EmptyTuple`, `H *: T`, more than 22
+    * elements): like upstream's Scala 3 derivation, a `WrongSizeList` is reported at the list (whose origin differs
+    * from the value's when HOCON built the list from an object with numeric keys).
+    */
+  def genericTupleListCursor(cursor: ConfigCursor, size: Int): Result[pureconfig.ConfigListCursor] =
+    cursor.asListCursor match {
+      case Right(list) =>
+        if (list.size == size) Right(list)
+        else list.failed(pureconfig.error.WrongSizeList(size, list.size))
+      case left => left
+    }
+
   /** Whether a tuple is read from its object representation (`{ _1 = ..., _2 = ... }`): like upstream's Shapeless
     * derivation, only when the value is not a list but is an object.
     */

@@ -14,6 +14,7 @@ trait ReaderMacrosImpl
     with SconfigDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
+    with hearth.kindlings.derivation.compiletime.GenericTuples
     with rules.ReaderUseCachedDefWhenAvailableRuleImpl
     with rules.ReaderUseImplicitWhenAvailableRuleImpl
     with rules.ReaderHandleAsBuiltInRuleImpl

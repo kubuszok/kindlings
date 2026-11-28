@@ -17,6 +17,7 @@ import pureconfig.ConfigWriter
 trait WriterMacrosImpl
     extends PureconfigDerivationTimeout
     with PureconfigDerivationPolicy
+    with hearth.kindlings.derivation.compiletime.GenericTuples
     with rules.WriterUseCachedDefWhenAvailableRuleImpl
     with rules.WriterUseImplicitWhenAvailableRuleImpl
     with rules.WriterHandleAsBuiltInRuleImpl

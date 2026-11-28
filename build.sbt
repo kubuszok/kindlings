@@ -764,10 +764,24 @@ val sconfigJavaTimePolyfill = List(
     )
 )
 
+// JVM + Scala 3 only test sources (bytecode-size guards of tuples with more than 22 elements)
+val sconfigJvm3TestSources = List(
+  MatrixAction
+    .ForPlatform(VirtualAxis.jvm)
+    .Configure(
+      _.settings(
+        Test / unmanagedSourceDirectories ++= foldVersion(scalaVersion.value)(
+          for3 = Seq(baseDirectory.value / "src" / "test" / "scalajvm-3"),
+          for2_13 = Seq.empty
+        )
+      )
+    )
+)
+
 lazy val sconfigDerivation = projectMatrix
   .in(file("sconfig-derivation"))
   .someVariations(versions.scalas, versions.platforms)(
-    (useCrossQuotes ++ dev.only1VersionInIDE ++ sconfigJavaTimePolyfill ++ nativeEvictionWarn) *
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ sconfigJavaTimePolyfill ++ sconfigJvm3TestSources ++ nativeEvictionWarn) *
   )
   .dependsOn(derivationCommons)
   .settings(
