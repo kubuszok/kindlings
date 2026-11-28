@@ -32,11 +32,24 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
           MIO.pure(
             Rule.yielded(s"The type ${Type[A].prettyPrint} is the type being derived, skipping implicit search")
           )
-        else
-          DTypes.Decoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
-            case Right(instanceExpr) => cacheAndUse[A](instanceExpr)
-            case Left(reason)        => yieldUnsupported[A](reason)
+        else {
+          implicit val DecoderA: Type[Decoder[A]] = DTypes.Decoder[A]
+          summonUserInstance[Decoder[A]](ignoredImplicits) match {
+            case UserInstanceSearch.Found(instanceExpr) => cacheAndUse[A](instanceExpr)
+            case UserInstanceSearch.Crashed(reason)     =>
+              failOnCrashedUserInstance[Decoder[A], Rule.Applicability[Expr[Either[DecodingFailure, A]]]](reason)
+            case UserInstanceSearch.NotFound(reason) =>
+              // a user's generic instance that needs instances Kindlings derives (e.g. `Decoder[Page[Item]]` built
+              // from a derived `Decoder[Item]`): the completed instance is a lazy val of the derived instance
+              completeUserDecoder[A](dctx).flatMap {
+                case Some(instanceExpr) =>
+                  dctx
+                    .cachedLazy[Decoder[A]]("cached-completed-decoder", s"decoder_${Type[A].shortName}", instanceExpr)
+                    .flatMap(cacheAndUse[A](_))
+                case None => yieldUnsupported[A](reason)
+              }
           }
+        }
       }
 
     private def cacheAndUse[A: DecoderCtx](

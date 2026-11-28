@@ -35,12 +35,52 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
           MIO.pure(
             Rule.yielded(s"The type ${Type[A].prettyPrint} is the type being derived, skipping implicit search")
           )
-        else
-          Types.Encoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
-            case Right(instanceExpr) => cacheAndUse[A](instanceExpr)
-            case Left(reason)        => yieldUnsupported[A](reason)
+        else {
+          implicit val EncoderA: Type[Encoder[A]] = Types.Encoder[A]
+          summonUserInstance[Encoder[A]](ignoredImplicits) match {
+            case UserInstanceSearch.Found(instanceExpr) => cacheAndUse[A](instanceExpr)
+            case UserInstanceSearch.Crashed(reason)     =>
+              failOnCrashedUserInstance[Encoder[A], Rule.Applicability[Expr[Json]]](reason)
+            case UserInstanceSearch.NotFound(reason) =>
+              // a user's generic instance that needs instances Kindlings derives (e.g. `Encoder[Page[Item]]` built
+              // from a derived `Encoder[Item]`)
+              completeUserInstance[Encoder, A](Types.Encoder, ignoredImplicits)(dependencyEncoder[A]).flatMap {
+                case Some(instanceExpr) => cacheAndUse[A](instanceExpr)
+                case None               => yieldUnsupported[A](reason)
+              }
           }
+        }
       }
+
+    /** The derived `Encoder[B]` that a user's instance needs: the cached encoding helper of `B` wrapped in an instance
+      * (a lazy val of the derived instance), so a recursive type passes its own encoding.
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def dependencyEncoder[A: EncoderCtx]: DependencyInstance[Encoder] = new DependencyInstance[Encoder] {
+      def apply[B: Type]: MIO[Expr[Encoder[B]]] = {
+        implicit val JsonT: Type[Json] = Types.Json
+        implicit val EncoderB: Type[Encoder[B]] = Types.Encoder[B]
+        implicit val KindlingsEncoderB: Type[hearth.kindlings.circederivation.KindlingsEncoder[B]] =
+          Types.KindlingsEncoder[B]
+        val ctx = ectx.nest[B](Expr.quote(null.asInstanceOf[B]))
+        for {
+          _ <- deriveEncoderRecursively[B](using ctx)
+          helper <- ctx.getHelper[B]
+          encode = helper.get
+          instance <- ctx.cachedInstance[B](
+            Expr
+              .quote {
+                hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[B] {
+                  (b: B) =>
+                    val _ = b
+                    Expr.splice(encode(Expr.quote(b), ctx.config))
+                }
+              }
+              .upcast[Encoder[B]]
+          )
+        } yield instance
+      }
+    }
 
     private def cacheAndUse[A: EncoderCtx](
         instanceExpr: Expr[Encoder[A]]

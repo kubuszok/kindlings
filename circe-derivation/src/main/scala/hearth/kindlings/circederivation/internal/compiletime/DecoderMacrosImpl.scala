@@ -15,6 +15,7 @@ import io.circe.{Decoder, DecodingFailure, HCursor, Json, KeyDecoder}
 trait DecoderMacrosImpl
     extends CirceDerivationTimeout
     with CirceDerivationPolicy
+    with hearth.kindlings.derivation.compiletime.UserInstances
     with SealedHierarchyFlattening
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
@@ -1147,16 +1148,21 @@ trait DecoderMacrosImpl
     ctx.getFieldDecoder[Field].flatMap {
       case Some(cached) => MIO.pure(cached)
       case None         =>
-        val decoder: MIO[Expr[Decoder[Field]]] = DTypes
-          .Decoder[Field]
-          .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
-          .toEither match {
-          case Right(decoderExpr) =>
-            Log.info(s"Found implicit Decoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
-          case Left(_) =>
-            Log.info(s"Building Decoder[${Type[Field].prettyPrint}] via recursive derivation") >>
-              buildDerivedDecoder[Field](ctx.config, ctx)
-        }
+        implicit val DecoderField: Type[Decoder[Field]] = DTypes.Decoder[Field]
+        val decoder: MIO[Expr[Decoder[Field]]] =
+          summonUserInstance[Decoder[Field]](DecoderUseImplicitWhenAvailableRule.ignoredImplicits) match {
+            case UserInstanceSearch.Found(decoderExpr) =>
+              Log.info(s"Found implicit Decoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
+            case UserInstanceSearch.Crashed(reason) =>
+              failOnCrashedUserInstance[Decoder[Field], Expr[Decoder[Field]]](reason)
+            case UserInstanceSearch.NotFound(_) =>
+              completeUserDecoder[Field](ctx).flatMap {
+                case Some(decoderExpr) => MIO.pure(decoderExpr)
+                case None              =>
+                  Log.info(s"Building Decoder[${Type[Field].prettyPrint}] via recursive derivation") >>
+                    buildDerivedDecoder[Field](ctx.config, ctx)
+              }
+          }
         for {
           decoderExpr <- decoder
           // a recursive field type may have cached it while it was being derived
@@ -1167,6 +1173,17 @@ trait DecoderMacrosImpl
           }
         } yield result
     }
+
+  /** A user's generic `Decoder[B]` (e.g. `implicit def dec[A](implicit a: Decoder[A]): Decoder[Page[A]]`) whose search
+    * failed only because the decoders of `B`'s type arguments do not exist yet, built with decoders derived here (the
+    * field decoders of those types: lazy vals of the derived instance).
+    */
+  protected def completeUserDecoder[B: Type](ctx: DecoderCtx[?]): MIO[Option[Expr[Decoder[B]]]] =
+    completeUserInstance[Decoder, B](DTypes.Decoder, DecoderUseImplicitWhenAvailableRule.ignoredImplicits)(
+      new DependencyInstance[Decoder] {
+        def apply[C: Type]: MIO[Expr[Decoder[C]]] = deriveFieldDecoder[C](using Type[C], ctx)
+      }
+    )
 
   /** Builds a `Decoder[B]` from the rule chain: one lambda `(cursor, failFast) => result` serves both `apply` and
     * `decodeAccumulating`; types whose decoder accepts `null` also get circe's absent-key `tryDecode`.
