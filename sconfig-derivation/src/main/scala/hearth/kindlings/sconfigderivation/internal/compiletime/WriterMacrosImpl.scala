@@ -11,6 +11,7 @@ import org.ekrich.config.ConfigValue
 trait WriterMacrosImpl
     extends SconfigDerivationTimeout
     with SconfigDerivationPolicy
+    with hearth.kindlings.derivation.compiletime.GenericTuples
     with rules.WriterUseCachedDefWhenAvailableRuleImpl
     with rules.WriterUseImplicitWhenAvailableRuleImpl
     with rules.WriterHandleAsBuiltInRuleImpl

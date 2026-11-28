@@ -31,6 +31,70 @@ final case class Pc3SocketConfig(
     sendBufferSize: Option[Int] = None
 )
 
+object Pc3Tuples {
+
+  /** 23 elements: more than `Tuple22`, a `TupleXXL` at runtime. */
+  type T23 = (
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Boolean
+  )
+
+  val t23: T23 =
+    (
+      0,
+      "s1",
+      2,
+      "s3",
+      4,
+      "s5",
+      6,
+      "s7",
+      8,
+      "s9",
+      10,
+      "s11",
+      12,
+      "s13",
+      14,
+      "s15",
+      16,
+      "s17",
+      18,
+      "s19",
+      20,
+      "s21",
+      true
+    )
+
+  val t23Hocon: String =
+    "[0, s1, 2, s3, 4, s5, 6, s7, 8, s9, 10, s11, 12, s13, 14, s15, 16, s17, 18, s19, 20, s21, true]"
+
+  type Cons = Int *: String *: EmptyTuple
+}
+final case class Pc3WithT23(values: Pc3Tuples.T23)
+final case class Pc3WithEmptyTuple(values: EmptyTuple, other: Int)
+
 /** The Scala 3-only cases of upstream's suites (pureconfig `modules/generic-scala3/src/test`: EnumDerivationSuite,
   * CoproductConvertDerivationSuite, ValueClassSuite, ProductConvertDerivationSuite), through Kindlings and through
   * upstream's `pureconfig.generic.semiauto`.
@@ -87,6 +151,81 @@ final class PureConfigScala3OracleSpec extends MacroSuite with PureConfigOracleS
     given lazyAR: ConfigReader[PcLazyA] = deriveReader[PcLazyA]
     val lazyBR: ConfigReader[PcLazyB] = deriveReader[PcLazyB]
     val lazyCR: ConfigReader[PcLazyC] = deriveReader[PcLazyC]
+  }
+
+  private object TuplesK {
+    import Pc3Tuples.*
+    val t23R: ConfigReader[T23] = KindlingsConfigReader.derived[T23]
+    val t23W: ConfigWriter[T23] = KindlingsConfigWriter.derived[T23]
+    val withT23R: ConfigReader[Pc3WithT23] = KindlingsConfigReader.derived[Pc3WithT23]
+    val withT23W: ConfigWriter[Pc3WithT23] = KindlingsConfigWriter.derived[Pc3WithT23]
+    val emptyR: ConfigReader[EmptyTuple] = KindlingsConfigReader.derived[EmptyTuple]
+    val emptyW: ConfigWriter[EmptyTuple] = KindlingsConfigWriter.derived[EmptyTuple]
+    val withEmptyR: ConfigReader[Pc3WithEmptyTuple] = KindlingsConfigReader.derived[Pc3WithEmptyTuple]
+    val withEmptyW: ConfigWriter[Pc3WithEmptyTuple] = KindlingsConfigWriter.derived[Pc3WithEmptyTuple]
+    val consR: ConfigReader[Cons] = KindlingsConfigReader.derived[Cons]
+    val consW: ConfigWriter[Cons] = KindlingsConfigWriter.derived[Cons]
+  }
+  private object TuplesU {
+    import Pc3Tuples.*
+    import pureconfig.generic.semiauto.*
+    given t23R: ConfigReader[T23] = deriveReader[T23]
+    given t23W: ConfigWriter[T23] = deriveWriter[T23]
+    val withT23R: ConfigReader[Pc3WithT23] = deriveReader[Pc3WithT23]
+    val withT23W: ConfigWriter[Pc3WithT23] = deriveWriter[Pc3WithT23]
+    given emptyR: ConfigReader[EmptyTuple] = deriveReader[EmptyTuple]
+    given emptyW: ConfigWriter[EmptyTuple] = deriveWriter[EmptyTuple]
+    val withEmptyR: ConfigReader[Pc3WithEmptyTuple] = deriveReader[Pc3WithEmptyTuple]
+    val withEmptyW: ConfigWriter[Pc3WithEmptyTuple] = deriveWriter[Pc3WithEmptyTuple]
+    val consR: ConfigReader[Cons] = deriveReader[Cons]
+    val consW: ConfigWriter[Cons] = deriveWriter[Cons]
+  }
+
+  group("tuples which are not TupleN (Scala 3: more than 22 elements, EmptyTuple, *:)") {
+    import Pc3Tuples.*
+
+    val broken = t23Hocon.replace("[0,", "[x,").replace("true]", "nope]")
+
+    test("a 23-element tuple is read from and written as a list") {
+      compareReads(TuplesK.t23R, TuplesU.t23R)(
+        value(t23Hocon),
+        value(broken),
+        value("[1, a]"),
+        value("str"),
+        root("_1 = 0"),
+        root(""""0" = 0, "1" = s1""")
+      )()
+      compareWrites(TuplesK.t23W, TuplesU.t23W)(t23)()
+      compareReads(TuplesK.withT23R, TuplesU.withT23R)(
+        root(s"values = $t23Hocon"),
+        root(s"values = $broken"),
+        root("values = []"),
+        root("")
+      )()
+      compareWrites(TuplesK.withT23W, TuplesU.withT23W)(Pc3WithT23(t23))()
+    }
+
+    test("EmptyTuple is read from and written as an empty list") {
+      compareReads(TuplesK.emptyR, TuplesU.emptyR)(value("[]"), value("[1]"), value("1"), root(""))()
+      compareWrites(TuplesK.emptyW, TuplesU.emptyW)(EmptyTuple)()
+      compareReads(TuplesK.withEmptyR, TuplesU.withEmptyR)(
+        root("values = [], other = 1"),
+        root("values = [1], other = 1"),
+        root("other = 1")
+      )()
+      compareWrites(TuplesK.withEmptyW, TuplesU.withEmptyW)(Pc3WithEmptyTuple(EmptyTuple, 1))()
+    }
+
+    test("a tuple written with *: is read from and written as a list") {
+      compareReads(TuplesK.consR, TuplesU.consR)(
+        value("[1, a]"),
+        value("[1]"),
+        value("[x, a]"),
+        value("str"),
+        root("_1 = 1, _2 = a")
+      )()
+      compareWrites(TuplesK.consW, TuplesU.consW)(1 *: "a" *: EmptyTuple)()
+    }
   }
 
   group("upstream EnumDerivationSuite (Scala 3 enums)") {

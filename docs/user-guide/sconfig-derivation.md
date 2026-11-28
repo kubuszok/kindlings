@@ -172,7 +172,9 @@ sconfig has no derivation of its own; derived instances behave like upstream Pur
   `ConfigWriter[Option[A]]` writes empty values too, and a custom plain `ConfigReader[Option[A]]` requires the key);
 - tuples are read from and written as **lists** (`(true, 5)` is `[true, 5]`): a list of another size fails with
   `WrongSizeList`, each failing element is reported under its index; an object is read from the product representation
-  (`{ _1 = true, _2 = 5 }`);
+  (`{ _1 = true, _2 = 5 }`); on Scala 3 tuples with more than 22 elements, tuples written with `*:`
+  (`Int *: String *: EmptyTuple`) and `EmptyTuple` (an empty list) are supported too, read only from lists (as
+  upstream PureConfig's Scala 3 derivation reads them);
 - a case object or a case class without parameters is read only from an object, and with `allowUnknownKeys = false`
   every key of it is an `UnknownKey` (for a subtype of a sealed family: every key but the discriminator);
 - default values are evaluated only when the key is missing;
@@ -360,6 +362,7 @@ Writers throw `CoproductHintException` (with `ConfigDecodingError.CollidingKeys`
 | `@ConfiguredJsonCodec`-style annotation | No | No |
 | Recursive types | Needs workarounds | Just works |
 | Tuples as lists | Yes | Yes |
+| Tuples with more than 22 elements, `*:`, `EmptyTuple` (Scala 3) | Yes (lists) | Yes (lists) |
 | `ReadsMissingKeys` / `WritesMissingKeys` instances of field types | Yes | Yes (own traits of the same names) |
 | Named tuples | No | Yes |
 | Opaque types | No | Yes |

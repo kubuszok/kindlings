@@ -121,6 +121,11 @@ Derived readers report failures like upstream's derivation: every failing field 
 
 Tuples (`(A, B)`, ... up to `Tuple22`) are read from and written as HOCON **lists**, like upstream's derivations: `(true, 5)` is `[true, 5]`. A list of another size fails with `WrongSizeList`, every failing element is reported at its index, and a value that is neither a list nor an object fails with `WrongType` (expecting a list). A value that is not a list but is an object is read from the tuple's product representation (`{ _1 = true, _2 = 5 }`), as upstream's Scala 2 derivation does (upstream's Scala 3 derivation reads only lists; Kindlings accepts the object form on both).
 
+On Scala 3 every tuple type is supported, as with upstream's Scala 3 derivation: tuples with more than 22 elements
+(`TupleXXL` at runtime), tuples written with `*:` (`Int *: String *: EmptyTuple`) and `EmptyTuple` (an empty list).
+They are read from and written as lists with the same failures, but - as upstream's Scala 3 derivation - only from lists:
+the `{ _1, _2 }` object form is read only for `TupleN` types (`(A, B)`, `Tuple2[A, B]`).
+
 ### Missing keys and types without fields
 
 - The instance in scope for a field's type decides how a missing key is handled, as upstream: a reader that is a `pureconfig.ReadsMissingKeys` (upstream's `Option` reader, your own) is given the missing key, any other reader gets a `KeyNotFound`; a writer that is a `pureconfig.WritesMissingKeys` (upstream's `Option` writer, your own) decides whether the key is written at all. So an empty `Option` is omitted by default, but a custom `ConfigWriter[Option[A]]` that is not a `WritesMissingKeys` is used as is (and a custom `ConfigReader[Option[A]]` that is not a `ReadsMissingKeys` requires the key).
@@ -306,6 +311,7 @@ This enables the `LogDerivation` implicits of `KindlingsConfigReader` and `Kindl
 | `derives` support (Scala 3) | N/A | `ConfigReader` only (Writer/Convert via semiauto) | `KindlingsConfigReader`, `KindlingsConfigWriter`, `KindlingsConfigConvert` |
 | Recursive types | Needs `Lazy` | Yes | Just works |
 | Tuples as lists | Yes (also read from `{ _1, _2 }` objects) | Yes (lists only) | Yes (also read from `{ _1, _2 }` objects) |
+| Tuples with more than 22 elements, `*:`, `EmptyTuple` (Scala 3) | N/A | Yes (lists) | Yes (lists) |
 | `ReadsMissingKeys` / `WritesMissingKeys` instances of field types | Yes | Yes | Yes |
 | Named tuples | No | No | Yes |
 | Opaque types | No | Partial | Yes |

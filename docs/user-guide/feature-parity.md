@@ -773,6 +773,7 @@ Type-class instances for primitives, collections, java.time, `java.net`, `java.n
 | Case-object enums (`North`/`South`/…) → HOCON string | `deriveEnumerationReader[E]` (separate API) | Same `KindlingsConfigReader.derived[E]` / `KindlingsConfigWriter.derived[E]` with `withWrappedSubtypes` (no discriminator): case-object families read and write strings, as `deriveEnumerationReader`/`Writer`; with the default discriminator they are `{ type = north }` objects, as upstream's default `FieldCoproductHint` | Improvement |
 | Singleton (`case object`) members | Yes | Yes | Parity |
 | Tuples (`TupleN`) | Lists: `(true, 5)` is `[true, 5]`; `WrongSizeList` for another size. Scala 2 (Shapeless) also reads the product representation `{ _1 = ..., _2 = ... }` when the value is an object and not a list; Scala 3 reads only lists | Read from and written as lists, same failures; the product representation is read on both Scala versions (as upstream on Scala 2) | Parity (Scala 2); Difference (Scala 3: also reads `{ _1, _2 }` objects) |
+| Scala 3 tuples that are not `TupleN` (more than 22 elements, `H *: T`, `EmptyTuple`) | Lists only (`EmptyTuple` is `[]`); `WrongSizeList` reported at the list | Same (lists only, same failures and origins) | Parity |
 | Case objects / case classes without parameters read on their own | Must be an object; `ProductHint(allowUnknownKeys = false)` reports every key | Same (`KindlingsProductHint` or the global `allowUnknownKeys`); for a subtype of a sealed family every key but the discriminator | Parity |
 | Value classes / `AnyVal` wrappers | Manual `ConfigReader.fromString` per type | Automatic unwrapping via `IsValueType` (covers `AnyVal`, `extends AnyVal`, refined types via `refined-integration`, opaque types) | Improvement |
 | Refined types (`eu.timepit.refined`) | Separate `pureconfig-refined` module | Automatic via `kindlings-refined-integration` (`Either[String, A]` wrap detected by `IsValueType`) | Improvement |
@@ -834,9 +835,10 @@ failure, its reason, path and origin — and the config values written. There ar
 `PureConfigUpstreamSuitesOracleSpec` and (Scala 3) `PureConfigScala3OracleSpec` run the cases of upstream's own
 derivation suites (`ProductHintSuite`, `CoproductHintSuite`, `ProductConvertersSuite` / `ProductConvertDerivationSuite`,
 `CoproductConvertersSuite` / `CoproductConvertDerivationSuite`, `TupleConvertersSuite`, `EnumerationsSuite` /
-`EnumDerivationSuite`, `ValueClassSuite`, `DerivationModesSuite`) through both libraries, failures' origins included.
-The **only expected difference**: on Scala 3 Kindlings also reads a tuple from its product representation
-(`{ _1 = ..., _2 = ... }`), which upstream reads on Scala 2 only.
+`EnumDerivationSuite`, `ValueClassSuite`, `DerivationModesSuite`) through both libraries, failures' origins included;
+`PureConfigScala3OracleSpec` also compares the tuples that are not `TupleN` (23 elements, `*:`, `EmptyTuple`), with no
+difference. The **only expected difference**: on Scala 3 Kindlings also reads a `TupleN` from its product
+representation (`{ _1 = ..., _2 = ... }`), which upstream reads on Scala 2 only.
 
 The Kindlings-only additions stay opt-in: `withWrappedSubtypes` for families that are not all case objects (single-key
 objects, no upstream counterpart), `@configKey`, `@transientField`.
@@ -959,6 +961,7 @@ Because no upstream library does derivation against sconfig today, this module i
 | Empty `Option` fields | Omitted when writing (upstream's `WritesMissingKeys`), not written as `null` |
 | Readers / writers of missing keys | The instance in scope for a field's type decides, as upstream: a `ReadsMissingKeys` reader (the built-in `Option` reader, user-provided ones) is given the missing key (`null`), any other reader - also a user-provided plain reader of an `Option` type - gets `KeyNotFound`; a `WritesMissingKeys` writer (the built-in `Option` writer, user-provided ones) decides whether the key is written (`toOpt`), any other writer is always written |
 | Tuples (`TupleN`) | Read from and written as lists (`(true, 5)` is `[true, 5]`); a list of another size fails with `WrongSizeList`, every failing element is reported under its index, a value that is neither a list nor an object with `WrongType` (expecting a list). A value that is an object is read from the product representation (`{ _1 = ..., _2 = ... }`), as upstream's Scala 2 derivation does (on both Scala versions). Unlike PureConfig's cursors, an object with numeric keys (`{ "0" = ..., "1" = ... }`) is not treated as a list (sconfig-derivation's collections do not either) |
+| Scala 3 tuples that are not `TupleN` (more than 22 elements, `H *: T`, `EmptyTuple`) | Read from and written as lists only (as upstream PureConfig's Scala 3 derivation; `EmptyTuple` is `[]`), with the same failures as `TupleN`; the `{ _1, _2 }` object form is not read |
 | Types without fields | A case object or a case class without parameters is read only from an object; with `allowUnknownKeys = false` every key of it is an `UnknownKey` (for a subtype of a sealed family: every key but the discriminator) |
 | Default values | Evaluated only when the key is missing |
 
