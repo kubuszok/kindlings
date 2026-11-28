@@ -13,6 +13,6 @@ final class UnreferencedJavaEnumJvmSpec extends MacroSuite {
   test("a JDK enum none of whose constants is referred to is derivable") {
     val holder = FspUnrefEnumHolder(java.nio.file.AccessMode.valueOf("WRITE"))
     val rendered = FastShowPretty.render(holder, RenderConfig.Compact)
-    assert(rendered.contains("WRITE"), rendered)
+    rendered ==> "FspUnrefEnumHolder(\nmode = (WRITE()): AccessMode\n)"
   }
 }
