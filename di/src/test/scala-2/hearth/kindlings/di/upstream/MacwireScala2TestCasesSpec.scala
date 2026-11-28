@@ -11,9 +11,14 @@ final class MacwireScala2TestCasesSpec extends hearth.MacroSuite {
   // macwire's cases declare their classes in a block, so its messages show simple names: drop the prefix of the
   // classes declared in this suite (and `java.lang.`) before looking for macwire's fragments
   private def simpleNames(errors: String): String =
-    errors.replaceAll("\u001b\\[[0-9;]*m", "").replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "").replace("java.lang.", "")
+    errors
+      .replaceAll("\u001b\\[[0-9;]*m", "")
+      .replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "")
+      .replace("java.lang.", "")
 
-  test("callByNameWireWith (documented difference: wireWith of a method with a by-name parameter, eta-expanded on Scala 2)") {
+  test(
+    "callByNameWireWith (documented difference: wireWith of a method with a by-name parameter, eta-expanded on Scala 2)"
+  ) {
     val errors: String = compileErrors("""
       case class A()
       case class B()
@@ -138,7 +143,9 @@ final class MacwireScala2TestCasesSpec extends hearth.MacroSuite {
     assert(errors.nonEmpty, "this macwire case now compiles: move it back to the supported cases")
   }
 
-  test("importAmbiguous (documented difference: members brought in by an import are not candidates) (does not compile)") {
+  test(
+    "importAmbiguous (documented difference: members brought in by an import are not candidates) (does not compile)"
+  ) {
     val errors: String = compileErrors("""
       case class A()
       case class B()
@@ -252,7 +259,9 @@ final class MacwireScala2TestCasesSpec extends hearth.MacroSuite {
     assert(errors.nonEmpty, "this macwire case now compiles: move it back to the supported cases")
   }
 
-  test("importWildcardDoNotImportObjectMethods (documented difference: members brought in by an import are not candidates)") {
+  test(
+    "importWildcardDoNotImportObjectMethods (documented difference: members brought in by an import are not candidates)"
+  ) {
     val errors: String = compileErrors("""
       case class A()
       case class B()
@@ -395,8 +404,11 @@ final class MacwireScala2TestCasesSpec extends hearth.MacroSuite {
     assert(errors.nonEmpty, "this macwire case now compiles: move it back to the supported cases")
   }
 
-  test("nullaryMethodUsedAsCandidate (documented difference: members brought in by an import are not candidates: no ambiguity)") {
-    val _ = MacwireScala2TestCasesSpec.case_nullaryMethodUsedAsCandidate__documented_difference__members_brought_in_by_an_import_are_not_candidates__no_ambiguity_
+  test(
+    "nullaryMethodUsedAsCandidate (documented difference: members brought in by an import are not candidates: no ambiguity)"
+  ) {
+    val _ =
+      MacwireScala2TestCasesSpec.case_nullaryMethodUsedAsCandidate__documented_difference__members_brought_in_by_an_import_are_not_candidates__no_ambiguity_
   }
 
   test("selfTypeHKT") {
@@ -429,28 +441,28 @@ object MacwireScala2TestCasesSpec {
     case class B(a: A)
 
     trait Parent {
-        lazy val a: A = wire[A]
+      lazy val a: A = wire[A]
     }
 
     object Test extends Parent {
 
-        def build: B = {
-            val b: B = wire[B]
+      def build: B = {
+        val b: B = wire[B]
 
-            // there used to be a bug where forwardA would be found eligible
-            // and preferred over Parent.a
-            val forwardA = A()
-            b
-        }
+        // there used to be a bug where forwardA would be found eligible
+        // and preferred over Parent.a
+        val forwardA = A()
+        b
+      }
 
-        def buildWithLazyDep: B = {
-            val b: B = wire[B]
+      def buildWithLazyDep: B = {
+        val b: B = wire[B]
 
-            // even though forwardA is lazy it is still not enough for it to
-            // be eligible - if it was (eligible), that would fail too in a forward reference error
-            lazy val forwardA = A()
-            b
-        }
+        // even though forwardA is lazy it is still not enough for it to
+        // be eligible - if it was (eligible), that would fail too in a forward reference error
+        lazy val forwardA = A()
+        b
+      }
     }
 
     require(Test.build.a eq Test.a)
@@ -460,7 +472,6 @@ object MacwireScala2TestCasesSpec {
   def case_implicitDepsWiredWithImplicitValsFromMethodScope(): Unit = {
     case class Dependency()
     case class Service()(implicit val dependency: Dependency)
-
 
     object MethodScope {
       def someMethod(dependency: Dependency)(implicit implicitDependency: Dependency): Unit = {
@@ -480,13 +491,12 @@ object MacwireScala2TestCasesSpec {
     class B(val a: A)
 
     object Test {
-       // import package or package object should be ignored
+      // import package or package object should be ignored
 
+      import scala.collection.mutable.*
 
-       import scala.collection.mutable._
-
-       lazy val a: A = wire[A]
-       lazy val b: B = wire[B]
+      lazy val a: A = wire[A]
+      lazy val b: B = wire[B]
     }
 
     require(Test.b.a eq Test.a)
@@ -496,12 +506,11 @@ object MacwireScala2TestCasesSpec {
     import scala.language.higherKinds
 
     case class A[FA[_]]()
-    case class B[FB[_]]( a:A[FB] )
-    case class C[FC[_]]( a:A[FC], b:B[FC] )
+    case class B[FB[_]](a: A[FB])
+    case class C[FC[_]](a: A[FC], b: B[FC])
 
     trait IO[T]
     trait OptionT[F[_], T]
-
 
     trait Base1[F[_]] {
       lazy val a: A[F] = wire[A[F]]
@@ -527,22 +536,22 @@ object MacwireScala2TestCasesSpec {
     case class B()
 
     trait BProvider {
-        lazy val b: B = wire[B]
+      lazy val b: B = wire[B]
     }
 
     object Test extends BProvider {
 
-        case class C(a: A, b: B, s: String)
+      case class C(a: A, b: B, s: String)
 
-        object C {
-            def factory(a: A, b: B): C = {
-                val s = "hey!"
-                wire[C]
-            }
+      object C {
+        def factory(a: A, b: B): C = {
+          val s = "hey!"
+          wire[C]
         }
+      }
 
-        lazy val a: A = wire[A]
-        lazy val c: C = wireWith(C.factory _)
+      lazy val a: A = wire[A]
+      lazy val c: C = wireWith(C.factory _)
     }
 
     require(Test.c.s == "hey!")
@@ -553,7 +562,6 @@ object MacwireScala2TestCasesSpec {
   def case_methodWithSingleImplicitParamOk(): Unit = {
     case class Dependency()
     case class Service()(implicit val dependency: Dependency)
-
 
     object Module {
       def someMethod(implicit implicitDependency: Dependency): Service = wire[Service]
@@ -576,7 +584,7 @@ object MacwireScala2TestCasesSpec {
     }
 
     object Test {
-      import Module._
+      import Module.*
 
       val a: A = new A()
       val b: B = wire[B]
@@ -587,37 +595,36 @@ object MacwireScala2TestCasesSpec {
     import scala.language.higherKinds
 
     case class A[FA[_]]()
-    case class B[FB[_]]( a:A[FB] )
-    case class C[FC[_]]( a:A[FC], b:B[FC] )
+    case class B[FB[_]](a: A[FB])
+    case class C[FC[_]](a: A[FC], b: B[FC])
 
     trait IO[T]
     trait OptionT[F[_], T]
 
-
     trait AProvider[APF[_]] {
-        def a : A[APF]
+      def a: A[APF]
     }
 
     trait BProvider[BPF[_]] {
-        def b : B[BPF]
+      def b: B[BPF]
     }
 
-    trait ModuleSimple[MSF[_]] { this : AProvider[MSF] =>
-        lazy val b: B[MSF] = wire[B[MSF]]
-        lazy val c: C[MSF] = wire[C[MSF]]
+    trait ModuleSimple[MSF[_]] { this: AProvider[MSF] =>
+      lazy val b: B[MSF] = wire[B[MSF]]
+      lazy val c: C[MSF] = wire[C[MSF]]
     }
 
-    trait ModuleMultiple[MMF[_]] { this : AProvider[MMF] with BProvider[MMF] =>
-        lazy val c: C[MMF] = wire[C[MMF]]
+    trait ModuleMultiple[MMF[_]] { this: AProvider[MMF] with BProvider[MMF] =>
+      lazy val c: C[MMF] = wire[C[MMF]]
     }
 
     trait AProviderImpl[AIF[_]] extends AProvider[AIF] {
-        lazy val a: A[AIF] = wire[A[AIF]]
+      lazy val a: A[AIF] = wire[A[AIF]]
     }
 
     trait ABProviderImpl[ABIF[_]] extends AProvider[ABIF] with BProvider[ABIF] {
-        lazy val a: A[ABIF] = wire[A[ABIF]]
-        lazy val b: B[ABIF] = wire[B[ABIF]]
+      lazy val a: A[ABIF] = wire[A[ABIF]]
+      lazy val b: B[ABIF] = wire[B[ABIF]]
     }
 
     object TestSimple extends ModuleSimple[IO] with AProviderImpl[IO]
@@ -625,12 +632,10 @@ object MacwireScala2TestCasesSpec {
     require(TestSimple.c.a == TestSimple.a)
     require(TestSimple.c.b == TestSimple.b)
 
-
     object TestMultiple extends ModuleMultiple[IO] with ABProviderImpl[IO]
 
     require(TestMultiple.c.a == TestMultiple.a)
     require(TestMultiple.c.b == TestMultiple.b)
-
 
     object ProviderAliasing {
       type AAndB[AABF[_]] = AProvider[AABF] with BProvider[AABF]
@@ -676,16 +681,16 @@ object MacwireScala2TestCasesSpec {
   object case_wireWithEmptyParams {
     object Test {
 
-        case class C(s: String)
+      case class C(s: String)
 
-        object C {
-            def factory(): C = {
-                val s = "hey!"
-                wire[C]
-            }
+      object C {
+        def factory(): C = {
+          val s = "hey!"
+          wire[C]
         }
+      }
 
-        lazy val c: C = wireWith(C.factory _)
+      lazy val c: C = wireWith(C.factory _)
     }
 
     require(Test.c.s == "hey!")
@@ -694,8 +699,8 @@ object MacwireScala2TestCasesSpec {
   object case_wireWithImplicits {
     case class A(n: Int, s: String)
     object A {
-        def make(n: Int)(implicit s: String): A =
-            A(n, s)
+      def make(n: Int)(implicit s: String): A =
+        A(n, s)
     }
 
     lazy val n = 0

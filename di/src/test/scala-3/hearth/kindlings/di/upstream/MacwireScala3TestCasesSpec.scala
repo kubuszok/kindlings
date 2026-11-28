@@ -11,7 +11,10 @@ final class MacwireScala3TestCasesSpec extends hearth.MacroSuite {
   // macwire's cases declare their classes in a block, so its messages show simple names: drop the prefix of the
   // classes declared in this suite (and `java.lang.`) before looking for macwire's fragments
   private def simpleNames(errors: String): String =
-    errors.replaceAll("\u001b\\[[0-9;]*m", "").replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "").replace("java.lang.", "")
+    errors
+      .replaceAll("\u001b\\[[0-9;]*m", "")
+      .replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "")
+      .replace("java.lang.", "")
 
   test("functionApplication (documented difference: parameters of enclosing lambdas are not candidates)") {
     val errors: String = compileErrors("""
@@ -97,7 +100,6 @@ object MacwireScala3TestCasesSpec {
     case class Dependency()
     case class Service()(implicit val dependency: Dependency)
 
-
     object MethodScope {
       def someMethod(dependency: Dependency)(implicit implicitDependency: Dependency): Unit = {
         val service: Service = wire[Service]
@@ -114,7 +116,6 @@ object MacwireScala3TestCasesSpec {
   def case_methodWithSingleImplicitParamOk(): Unit = {
     case class Dependency()
     case class Service()(implicit val dependency: Dependency)
-
 
     object Module {
       def someMethod(implicit implicitDependency: Dependency): Service = wire[Service]
@@ -137,32 +138,32 @@ object MacwireScala3TestCasesSpec {
     case class Group(as: List[A])
 
     class Plugin1 {
-        lazy val a1: A = wire[A1]
+      lazy val a1: A = wire[A1]
     }
 
     class Plugin2 {
-        lazy val a2: A = wire[A2]
+      lazy val a2: A = wire[A2]
     }
 
     trait Module3 {
-        lazy val a3: A = wire[A3]
+      lazy val a3: A = wire[A3]
     }
 
     class App(plugin1: Plugin1, plugin2: Plugin2) extends Module3 {
-        import plugin1._
-        import plugin2._
+      import plugin1.*
+      import plugin2.*
 
-        lazy val a4: A = wire[A4]
+      lazy val a4: A = wire[A4]
 
-        // wireList looks at the same places as wireSet:
-        // - enclosing members
-        // - enclosing imports
-        // - parents
-        // but preserves the order of definition
-        lazy val as: List[A] = wireList[A]
+      // wireList looks at the same places as wireSet:
+      // - enclosing members
+      // - enclosing imports
+      // - parents
+      // but preserves the order of definition
+      lazy val as: List[A] = wireList[A]
 
-        // inject that List of A into Group
-        lazy val group: Group = wire[Group]
+      // inject that List of A into Group
+      lazy val group: Group = wire[Group]
     }
 
     val plugin1 = new Plugin1

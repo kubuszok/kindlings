@@ -11,7 +11,10 @@ final class MacwireTestCasesSpec extends hearth.MacroSuite {
   // macwire's cases declare their classes in a block, so its messages show simple names: drop the prefix of the
   // classes declared in this suite (and `java.lang.`) before looking for macwire's fragments
   private def simpleNames(errors: String): String =
-    errors.replaceAll("\u001b\\[[0-9;]*m", "").replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "").replace("java.lang.", "")
+    errors
+      .replaceAll("\u001b\\[[0-9;]*m", "")
+      .replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "")
+      .replace("java.lang.", "")
 
   test("anonFuncAndMethodsArgsWiredOk (documented difference: parameters of enclosing lambdas are not candidates)") {
     val errors: String = compileErrors("""
@@ -114,7 +117,10 @@ final class MacwireTestCasesSpec extends hearth.MacroSuite {
     assert(errors.nonEmpty, "expected a compilation error")
     assert(simpleNames(errors).contains("No public primary constructor found for"), errors)
     assert(simpleNames(errors).contains("PrivConstructor"), errors)
-    assert(simpleNames(errors).contains("and multiple matching apply methods in its companion object were found for"), errors)
+    assert(
+      simpleNames(errors).contains("and multiple matching apply methods in its companion object were found for"),
+      errors
+    )
   }
 
   test("companionObjectHasFakeApplyMethods (does not compile)") {
@@ -279,7 +285,9 @@ final class MacwireTestCasesSpec extends hearth.MacroSuite {
     val _ = MacwireTestCasesSpec.case_inheritanceProtectedMembersInParent
   }
 
-  test("inheritancePublicMembersInParent (documented difference: inherited members are in the same scope as declared ones (ambiguity))") {
+  test(
+    "inheritancePublicMembersInParent (documented difference: inherited members are in the same scope as declared ones (ambiguity))"
+  ) {
     val errors: String = compileErrors("""
       case class A()
       case class B()
@@ -332,7 +340,9 @@ final class MacwireTestCasesSpec extends hearth.MacroSuite {
     MacwireTestCasesSpec.case_methodSingleParamOk()
   }
 
-  test("methodWithWiredWithinIfThenElse (documented difference: parameters of outer enclosing methods are not candidates)") {
+  test(
+    "methodWithWiredWithinIfThenElse (documented difference: parameters of outer enclosing methods are not candidates)"
+  ) {
     val errors: String = compileErrors("""
       case class A()
       case class B()
@@ -410,8 +420,11 @@ final class MacwireTestCasesSpec extends hearth.MacroSuite {
     assert(errors.nonEmpty, "this macwire case now compiles: move it back to the supported cases")
   }
 
-  test("nestedMethodsWired (documented difference: parameters of outer enclosing methods are not candidates: the inner parameter is used, no ambiguity)") {
-    val _ = MacwireTestCasesSpec.case_nestedMethodsWired__documented_difference__parameters_of_outer_enclosing_methods_are_not_candidates__the_inner_parameter_is_used__no_ambiguity_
+  test(
+    "nestedMethodsWired (documented difference: parameters of outer enclosing methods are not candidates: the inner parameter is used, no ambiguity)"
+  ) {
+    val _ =
+      MacwireTestCasesSpec.case_nestedMethodsWired__documented_difference__parameters_of_outer_enclosing_methods_are_not_candidates__the_inner_parameter_is_used__no_ambiguity_
   }
 
   test("nestedMethodsWired (documented difference: parameters of outer enclosing methods are not candidates)") {
@@ -442,7 +455,9 @@ final class MacwireTestCasesSpec extends hearth.MacroSuite {
     assert(errors.nonEmpty, "this macwire case now compiles: move it back to the supported cases")
   }
 
-  test("nestedWithManyMatchingParamsWired (documented difference: parameters of outer enclosing methods are not candidates) (does not compile)") {
+  test(
+    "nestedWithManyMatchingParamsWired (documented difference: parameters of outer enclosing methods are not candidates) (does not compile)"
+  ) {
     val errors: String = compileErrors("""
       case class A()
       case class B()
@@ -526,7 +541,9 @@ final class MacwireTestCasesSpec extends hearth.MacroSuite {
     MacwireTestCasesSpec.case_simpleValsInClass()
   }
 
-  test("simpleValsInClassParameters (documented difference: constructor parameters of the enclosing class that are not vals are not candidates)") {
+  test(
+    "simpleValsInClassParameters (documented difference: constructor parameters of the enclosing class that are not vals are not candidates)"
+  ) {
     val errors: String = compileErrors("""
       case class A()
       case class B()
@@ -673,7 +690,7 @@ object MacwireTestCasesSpec {
         def apply(dependency: => A) = { created.append("a"); new Component(dependency) }
       }
 
-      val dependency =  new A()
+      val dependency = new A()
       val component: Component = wire[Component]
     }
 
@@ -719,12 +736,11 @@ object MacwireTestCasesSpec {
 
     class DImpl(val c: C)
 
-
     trait Test {
-        lazy val theA: AImpl = wire[AImpl]
-        lazy val theB: BImpl = wire[BImpl]
-        lazy val theC: CImpl = wire[CImpl]
-        lazy val theD: DImpl = wire[DImpl]
+      lazy val theA: AImpl = wire[AImpl]
+      lazy val theB: BImpl = wire[BImpl]
+      lazy val theC: CImpl = wire[CImpl]
+      lazy val theD: DImpl = wire[DImpl]
     }
 
     val t = new Test {}
@@ -746,13 +762,13 @@ object MacwireTestCasesSpec {
 
     object Test {
 
-        class PrivConstructor private(val a : A) {}
-        object PrivConstructor {
-          def apply(a: A) : PrivConstructor = new PrivConstructor(A(a.i + 1))
-        }
+      class PrivConstructor private (val a: A) {}
+      object PrivConstructor {
+        def apply(a: A): PrivConstructor = new PrivConstructor(A(a.i + 1))
+      }
 
-        val a = A(3)
-        val pc: PrivConstructor = wire[PrivConstructor]
+      val a = A(3)
+      val pc: PrivConstructor = wire[PrivConstructor]
     }
 
     require(Test.pc.a == A(4))
@@ -764,11 +780,11 @@ object MacwireTestCasesSpec {
 
     object Test {
 
-        lazy val a: A = wire[A]
+      lazy val a: A = wire[A]
 
-        def buildSomeA(i: Int): A = A()
+      def buildSomeA(i: Int): A = A()
 
-        lazy val b: B = wire[B]
+      lazy val b: B = wire[B]
     }
 
     require(Test.b.a eq Test.a)
@@ -780,15 +796,15 @@ object MacwireTestCasesSpec {
 
     object Test {
 
-        var countA: Int = 0
+      var countA: Int = 0
 
-        def a: A = {
-            countA += 1
-            A()
-        }
+      def a: A = {
+        countA += 1
+        A()
+      }
 
-        lazy val b1: B = wire[B]
-        lazy val b2: B = wire[B]
+      lazy val b1: B = wire[B]
+      lazy val b2: B = wire[B]
     }
 
     require(!(Test.b1.a eq Test.b2.a))
@@ -863,8 +879,8 @@ object MacwireTestCasesSpec {
     case class B(a: A)
 
     object Test {
-        lazy val b: B = wire[B]
-        lazy val a: A = wire[A]
+      lazy val b: B = wire[B]
+      lazy val a: A = wire[A]
     }
 
     require(Test.b.a eq Test.a)
@@ -874,13 +890,12 @@ object MacwireTestCasesSpec {
     case class Dependency()
     case class Service()(implicit val dependency: Dependency)
 
-
     trait Abstract {
       implicit val dependency: Dependency
     }
 
     object Test extends Abstract {
-      override implicit val dependency: Dependency = new Dependency
+      implicit override val dependency: Dependency = new Dependency
       val service: Service = wire[Service]
     }
 
@@ -891,10 +906,9 @@ object MacwireTestCasesSpec {
     case class Dependency()
     case class Service()(implicit val dependency: Dependency)
 
-
     implicit def dependency: Dependency = new Dependency
 
-    object Test  {
+    object Test {
       val service: Service = wire[Service]
     }
   }
@@ -903,10 +917,9 @@ object MacwireTestCasesSpec {
     case class Dependency()
     case class Service()(implicit val dependency: Dependency)
 
-
     implicit val dependency: Dependency = new Dependency
 
-    object Test  {
+    object Test {
       val service: Service = wire[Service]
     }
 
@@ -916,7 +929,6 @@ object MacwireTestCasesSpec {
   object case_implicitDepsWiredWithImplicitValsFromEnclosingModuleScope {
     case class Dependency()
     case class Service()(implicit val dependency: Dependency)
-
 
     object ModuleScope {
       implicit val moduleImplicitDependency: Dependency = new Dependency()
@@ -928,7 +940,6 @@ object MacwireTestCasesSpec {
   object case_implicitDepsWiredWithImplicitValsFromParentsScope {
     case class Dependency()
     case class Service()(implicit val dependency: Dependency)
-
 
     trait DependencyProvider {
       implicit val implicitDependency: Dependency = new Dependency
@@ -979,15 +990,14 @@ object MacwireTestCasesSpec {
 
     class DImpl(val c: C)
 
-
     trait Base {
-        lazy val theA: AImpl = wire[AImpl]
-        lazy val theB: BImpl = wire[BImpl]
+      lazy val theA: AImpl = wire[AImpl]
+      lazy val theB: BImpl = wire[BImpl]
     }
 
     trait Test extends Base {
-        lazy val theC: CImpl = wire[CImpl]
-        lazy val theD: DImpl = wire[DImpl]
+      lazy val theC: CImpl = wire[CImpl]
+      lazy val theD: DImpl = wire[DImpl]
     }
 
     val t = new Test {}
@@ -1014,15 +1024,15 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Base1 {
-        lazy val theA: A = wire[A]
+      lazy val theA: A = wire[A]
     }
 
     trait Base2 {
-        lazy val theB: B = wire[B]
+      lazy val theB: B = wire[B]
     }
 
     trait Test extends Base1 with Base2 {
-        lazy val theC: C = wire[C]
+      lazy val theC: C = wire[C]
     }
 
     val t = new Test {}
@@ -1045,12 +1055,12 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     class Base(name: String) {
-        lazy val theA: A = wire[A]
-        lazy val theB: B = wire[B]
+      lazy val theA: A = wire[A]
+      lazy val theB: B = wire[B]
     }
 
     object t extends Base("toto") {
-        lazy val theC: C = wire[C]
+      lazy val theC: C = wire[C]
     }
 
     require(t.theC.a eq t.theA)
@@ -1111,12 +1121,12 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Base {
-        def theA: A = wire[A]
-        def theB: B = wire[B]
+      def theA: A = wire[A]
+      def theB: B = wire[B]
     }
 
     trait Test extends Base {
-        def theC: C = wire[C]
+      def theC: C = wire[C]
     }
 
     val t = new Test {}
@@ -1136,12 +1146,12 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Base {
-        lazy val theA: A = wire[A]
-        lazy val theB: B = wire[B]
+      lazy val theA: A = wire[A]
+      lazy val theB: B = wire[B]
     }
 
     trait Test extends Base {
-        lazy val theC: C = wire[C]
+      lazy val theC: C = wire[C]
     }
 
     val t = new Test {}
@@ -1164,17 +1174,17 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Base1 {
-        lazy val theA: A = wire[A]
-        lazy val theB: B = wire[B]
+      lazy val theA: A = wire[A]
+      lazy val theB: B = wire[B]
     }
 
     trait Base2 extends Base1 {
-        lazy val theC: C = wire[C]
+      lazy val theC: C = wire[C]
     }
 
     trait Test extends Base2 {
-        lazy val theD: D = wire[D]
-        lazy val theE: E = wire[E]
+      lazy val theD: D = wire[D]
+      lazy val theE: E = wire[E]
     }
 
     val t = new Test {}
@@ -1205,8 +1215,8 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     class Test {
-        lazy val theA: A = wire[A]
-        def theC(someB: B): C = wire[C]
+      lazy val theA: A = wire[A]
+      def theC(someB: B): C = wire[C]
     }
 
     val t = new Test
@@ -1232,11 +1242,11 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     class Test {
-        object Props {
-            def apply[T](creator: => T): T = creator
-        }
+      object Props {
+        def apply[T](creator: => T): T = creator
+      }
 
-        def theC(a: A, b: B): C = Props(wire[C])
+      def theC(a: A, b: B): C = Props(wire[C])
     }
 
     val t = new Test
@@ -1263,7 +1273,7 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     class Test {
-        def theC(someB: B, someA: A): C = wire[C]
+      def theC(someB: B, someA: A): C = wire[C]
     }
 
     val t = new Test
@@ -1285,7 +1295,7 @@ object MacwireTestCasesSpec {
     case class B(a: A)
 
     class Test {
-        def theB(someA: A): B = wire[B]
+      def theB(someA: A): B = wire[B]
     }
 
     val t = new Test
@@ -1315,7 +1325,7 @@ object MacwireTestCasesSpec {
       // method's parameter 'a' will shadow def 'a'.
       def a(outerA: A): A => B = {
         def innerA(innerA: A): C = wire[C]
-        (aa: A) => b 
+        (aa: A) => b
       }
     }
 
@@ -1333,7 +1343,7 @@ object MacwireTestCasesSpec {
     }
 
     object Test {
-      import Module._
+      import Module.*
 
       val a: A = new A()
       val b: B = wire[B]
@@ -1352,36 +1362,35 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait AProvider {
-        def a : A
+      def a: A
     }
 
     trait BProvider {
-        def b : B
+      def b: B
     }
 
-    trait ModuleSimple { this : AProvider =>
-        lazy val b: B = wire[B]
-        lazy val c: C = wire[C]
+    trait ModuleSimple { this: AProvider =>
+      lazy val b: B = wire[B]
+      lazy val c: C = wire[C]
     }
 
-    trait ModuleMultiple { this : AProvider with BProvider =>
-        lazy val c: C = wire[C]
+    trait ModuleMultiple { this: AProvider with BProvider =>
+      lazy val c: C = wire[C]
     }
 
     trait AProviderImpl extends AProvider {
-        lazy val a: A = wire[A]
+      lazy val a: A = wire[A]
     }
 
     trait ABProviderImpl extends AProvider with BProvider {
-        lazy val a: A = wire[A]
-        lazy val b: B = wire[B]
+      lazy val a: A = wire[A]
+      lazy val b: B = wire[B]
     }
 
     object TestSimple extends ModuleSimple with AProviderImpl
 
     require(TestSimple.c.a == TestSimple.a)
     require(TestSimple.c.b == TestSimple.b)
-
 
     object TestMultiple extends ModuleMultiple with ABProviderImpl
 
@@ -1411,9 +1420,9 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Test {
-        def theA: A = wire[A]
-        def theB: B = wire[B]
-        def theC: C = wire[C]
+      def theA: A = wire[A]
+      def theB: B = wire[B]
+      def theC: C = wire[C]
     }
 
     val t = new Test {}
@@ -1427,12 +1436,11 @@ object MacwireTestCasesSpec {
     import scala.language.higherKinds
 
     case class A[FA[_]]()
-    case class B[FB[_]]( a:A[FB] )
-    case class C[FC[_]]( a:A[FC], b:B[FC] )
+    case class B[FB[_]](a: A[FB])
+    case class C[FC[_]](a: A[FC], b: B[FC])
 
     trait IO[T]
     trait OptionT[F[_], T]
-
 
     case class LocalA[X]()
     case class LocalB[X](la: LocalA[X])
@@ -1458,9 +1466,9 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Test {
-        lazy val theA: A = wire[A]
-        lazy val theB: B = wire[B]
-        lazy val theC: C = wire[C]
+      lazy val theA: A = wire[A]
+      lazy val theB: B = wire[B]
+      lazy val theC: C = wire[C]
     }
 
     val t = new Test {}
@@ -1483,10 +1491,10 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Test {
-        lazy val theD: D = wire[D]
-        lazy val theC: C = wire[C]
-        lazy val theB: B = wire[B]
-        lazy val theA: A = wire[A]
+      lazy val theD: D = wire[D]
+      lazy val theC: C = wire[C]
+      lazy val theB: B = wire[B]
+      lazy val theA: A = wire[A]
     }
 
     val t = new Test {}
@@ -1514,14 +1522,14 @@ object MacwireTestCasesSpec {
     case class F(a: A)(implicit val b: B)
 
     object Implicits {
-        implicit val theB: B = wire[B]
+      implicit val theB: B = wire[B]
     }
 
     trait Test {
-        import Implicits._
+      import Implicits.*
 
-        val theA: A = wire[A]
-        val theF: F = wire[F]
+      val theA: A = wire[A]
+      val theF: F = wire[F]
     }
 
     val t = new Test {}
@@ -1543,9 +1551,9 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     class Test {
-        val theA: A = wire[A]
-        val theB: B = wire[B]
-        val theC: C = wire[C]
+      val theA: A = wire[A]
+      val theB: B = wire[B]
+      val theC: C = wire[C]
     }
 
     val t = new Test {}
@@ -1568,12 +1576,12 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     object Test {
-        val theA: A = wire[A]
-        val theB: B = wire[B]
-        val theC: C = wire[C]
+      val theA: A = wire[A]
+      val theB: B = wire[B]
+      val theC: C = wire[C]
 
-        require(theC.a != null)
-        require(theC.b != null)
+      require(theC.a != null)
+      require(theC.b != null)
     }
 
     require(Test.theC.a != null)
@@ -1593,9 +1601,9 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Test {
-        val theA: A = wire[A]
-        val theB: B = wire[B]
-        val theC: C = wire[C]
+      val theA: A = wire[A]
+      val theB: B = wire[B]
+      val theC: C = wire[C]
     }
 
     val t = new Test {}
@@ -1620,11 +1628,11 @@ object MacwireTestCasesSpec {
     case class F(a: A, b: B)(val c: C)(val d: D)
 
     trait Test {
-        val theA: A = wire[A]
-        val theB: B = wire[B]
-        val theC: C = wire[C]
-        val theD: D = wire[D]
-        val theF: F = wire[F]
+      val theA: A = wire[A]
+      val theB: B = wire[B]
+      val theC: C = wire[C]
+      val theD: D = wire[D]
+      val theF: F = wire[F]
     }
 
     val t = new Test {}
@@ -1657,10 +1665,10 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Test {
-        val theA: A = wire[A]
-        val theB: B = wire[B]
-        val theC: C = wire[C]
-        val theD = new D(theC) // reference
+      val theA: A = wire[A]
+      val theB: B = wire[B]
+      val theC: C = wire[C]
+      val theD = new D(theC) // reference
     }
 
     val t = new Test {}
@@ -1683,15 +1691,14 @@ object MacwireTestCasesSpec {
     case class E(a: A, c: C)
 
     trait Test {
-        def theA: A
-        def theB: B
-        lazy val theC: C = wire[C]
+      def theA: A
+      def theB: B
+      lazy val theC: C = wire[C]
     }
 
-
     val t = new Test {
-        lazy val theA = new A
-        lazy val theB = new B
+      lazy val theA = new A
+      lazy val theB = new B
     }
 
     require(t.theC.a != null)
@@ -1713,12 +1720,12 @@ object MacwireTestCasesSpec {
     class Service(val a: A, implicit val b: B)
 
     object Test {
-        lazy val a: A = wire[A]
-        lazy val b: B = wire[B]
+      lazy val a: A = wire[A]
+      lazy val b: B = wire[B]
 
-        // if macwire let the compiler wire the dependencies it will fail
-        // as `a` isn't implicit
-        lazy val service: Service = wire[Service]
+      // if macwire let the compiler wire the dependencies it will fail
+      // as `a` isn't implicit
+      lazy val service: Service = wire[Service]
     }
 
     require(Test.service.a eq Test.a)
@@ -1732,14 +1739,14 @@ object MacwireTestCasesSpec {
     case class D(a: A, c: C)
 
     object Test {
-        lazy val b: B = wire[B]
-        lazy val a: A = wire[A]
+      lazy val b: B = wire[B]
+      lazy val a: A = wire[A]
 
-        lazy val d: D = wireRec[D]
+      lazy val d: D = wireRec[D]
 
-        require(d.a == a)
-        require(d.c.a == a)
-        require(d.c.b == b)
+      require(d.a == a)
+      require(d.c.a == a)
+      require(d.c.b == b)
     }
   }
 
@@ -1751,10 +1758,10 @@ object MacwireTestCasesSpec {
     case class E(c: C, d: D)
 
     object Test {
-        lazy val e: E = wireRec[E]
+      lazy val e: E = wireRec[E]
 
-        require(e.c.a == A())
-        require(e.c == e.d.c)
+      require(e.c.a == A())
+      require(e.c == e.d.c)
     }
   }
 
@@ -1768,31 +1775,31 @@ object MacwireTestCasesSpec {
     case class Group(as: Set[A])
 
     class Plugin1 {
-        lazy val a1: A = wire[A1]
+      lazy val a1: A = wire[A1]
     }
 
     class Plugin2 {
-        lazy val a2: A = wire[A2]
+      lazy val a2: A = wire[A2]
     }
 
     trait Module3 {
-        lazy val a3: A = wire[A3]
+      lazy val a3: A = wire[A3]
     }
 
     class App(plugin1: Plugin1, plugin2: Plugin2) extends Module3 {
-        import plugin1._
-        import plugin2._
+      import plugin1.*
+      import plugin2.*
 
-        lazy val a4: A = wire[A4]
+      lazy val a4: A = wire[A4]
 
-        // wireSet look at the usual places:
-        // - enclosing members
-        // - enclosing imports
-        // - parents
-        lazy val as : Set[A] = wireSet[A]
+      // wireSet look at the usual places:
+      // - enclosing members
+      // - enclosing imports
+      // - parents
+      lazy val as: Set[A] = wireSet[A]
 
-        // inject that Set of A into Group
-        lazy val group: Group = wire[Group]
+      // inject that Set of A into Group
+      lazy val group: Group = wire[Group]
     }
 
     val plugin1 = new Plugin1
@@ -1809,18 +1816,17 @@ object MacwireTestCasesSpec {
     case class B()
 
     object Test {
-        case class C(a: A, b: B)
+      case class C(a: A, b: B)
 
-        object C {
-            def factory(a: A, b: B): C = {
-                wire[C]
-            }
-        }
+      object C {
+        def factory(a: A, b: B): C =
+          wire[C]
+      }
 
-        lazy val a: A = wire[A]
-        lazy val b: B = wire[B]
+      lazy val a: A = wire[A]
+      lazy val b: B = wire[B]
 
-        lazy val c: C = wireWith(C.factory _)
+      lazy val c: C = wireWith(C.factory _)
     }
 
     require(Test.c.a eq Test.a)
