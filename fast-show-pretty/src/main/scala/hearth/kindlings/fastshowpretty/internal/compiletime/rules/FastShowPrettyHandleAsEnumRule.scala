@@ -39,13 +39,27 @@ trait FastShowPrettyHandleAsEnumRuleImpl { this: FastShowPrettyMacrosImpl & Macr
         .parMatchOn[MIO, StringBuilder](ctx.value) { matched =>
           import matched.{value as enumCaseValue, Underlying as EnumCase}
           Log.namedScope(s"Deriving the value ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
-            // Use incrementLevel so nested case classes in enum cases are indented properly
-            deriveResultRecursively[EnumCase](using ctx.incrementLevel.nest(enumCaseValue)).map { enumCaseResult =>
-              Expr.quote {
-                val _ = Expr.splice(ctx.sb).append("(")
-                Expr.splice(enumCaseResult).append("): ").append(Expr.splice(name))
+            if (Type[A].isJavaEnum) {
+              // A Java enum constant is rendered as a singleton (`(WRITE()): AccessMode`) right here: on Scala 2 the
+              // value bound by the match is typed as the enum, not as the constant's singleton type, so it cannot be
+              // passed to a helper derived for that singleton type.
+              val constantName = Expr(Type[EnumCase].shortName)
+              MIO.pure(Expr.quote {
+                Expr
+                  .splice(ctx.sb)
+                  .append("(")
+                  .append(Expr.splice(constantName))
+                  .append("()): ")
+                  .append(Expr.splice(name))
+              })
+            } else
+              // Use incrementLevel so nested case classes in enum cases are indented properly
+              deriveResultRecursively[EnumCase](using ctx.incrementLevel.nest(enumCaseValue)).map { enumCaseResult =>
+                Expr.quote {
+                  val _ = Expr.splice(ctx.sb).append("(")
+                  Expr.splice(enumCaseResult).append("): ").append(Expr.splice(name))
+                }
               }
-            }
           }
         }
         .flatMap {
