@@ -117,7 +117,6 @@ differences = {
   'methodWithWiredWithinIfThenElse': 'parameters of outer enclosing methods are not candidates',
   'methodWithWiredWithinPatternMatch': 'values bound by a pattern are not candidates',
   'simpleValsInClassParameters': 'constructor parameters of the enclosing class that are not vals are not candidates',
-  'inheritancePublicMembersInParent': 'inherited members are in the same scope as declared ones (ambiguity)',
   'import': 'members brought in by an import are not candidates',
   'importRename': 'members brought in by an import are not candidates',
   'importWildcard': 'members brought in by an import are not candidates',

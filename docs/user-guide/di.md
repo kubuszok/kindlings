@@ -68,7 +68,8 @@ class UserModule {
 Candidates are gathered from:
 
 - the members (declared **and inherited**) of the enclosing classes/objects — so module composition by trait
-  inheritance works;
+  inheritance works — with the members declared in the class/object itself ranked before the inherited ones (see
+  below);
 - the public, parameterless members of any in-scope value whose type is annotated [`@Module`](#modules);
 - the **parameters of the enclosing method** (every parameter clause, `implicit`/`using` ones included; by-name
   parameters are evaluated where they are needed), on Scala 2 and Scala 3; and
@@ -78,6 +79,29 @@ When the same type is available in more than one scope, the **nearest** (innermo
 error only when a single scope offers more than one candidate. The enclosing method's parameters (together with its
 local `val`s) are the innermost scope, as in macwire: a parameter shadows a member of the same type, while two
 parameters of the same type are reported as an ambiguity, with their names.
+
+Within an enclosing class or object the candidates are ranked as in macwire:
+
+1. the members **declared** in the class/object itself (an `override` of an inherited member counts as declared);
+2. the **inherited** members (from parent classes/traits and from a self-type), together with the members of a
+   [`@Module`](#modules) held by a declared member;
+3. the members of a `@Module` held by an inherited member.
+
+So a declared member shadows an inherited member of the same type, while two declared (or two inherited) members of
+the same type are an ambiguity:
+
+```scala
+trait DatabaseDefaults {
+  lazy val defaultDatabaseAccess: DatabaseAccess = new DatabaseAccess()
+  lazy val securityFilter: SecurityFilter = new SecurityFilter()
+}
+
+class TestModule extends DatabaseDefaults {
+  lazy val testDatabaseAccess: DatabaseAccess = new DatabaseAccess()
+  // testDatabaseAccess (declared) wins over defaultDatabaseAccess (inherited); securityFilter is inherited
+  lazy val userFinder: UserFinder = DI.wire[UserFinder]
+}
+```
 
 ```scala
 object Wiring {
@@ -385,9 +409,8 @@ To also see the full generation log (the resolution logic **and** the generated 
 - **Not candidates (macwire: candidates):** members brought in by an `import`, constructor parameters of the enclosing
   class that are not `val`s, values bound by a pattern, local `val`s of a nested block (`if` branches), and on Scala 3
   any local `val`.
-- **Inherited members** are in the same scope as the members declared in the class itself: a declared and an inherited
-  value of the same type are an ambiguity (macwire prefers the declared one). For `wireList`, declared members come
-  before inherited ones (macwire: inherited first).
+- **`wireList` order**: the members declared in the class come before the inherited ones (macwire's Scala 3 `wireList`
+  test case expects the inherited member first).
 - **Error wording** differs in places (same information), e.g. `unused dependencies: C()` (macwire: `C.apply()`),
   `No public primary constructor found for [T]` + `Companion object for [T] has no apply methods ...` (macwire:
   `Cannot find a public constructor ... for [T]`).

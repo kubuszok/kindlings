@@ -285,31 +285,8 @@ final class MacwireTestCasesSpec extends hearth.MacroSuite {
     val _ = MacwireTestCasesSpec.case_inheritanceProtectedMembersInParent
   }
 
-  test(
-    "inheritancePublicMembersInParent (documented difference: inherited members are in the same scope as declared ones (ambiguity))"
-  ) {
-    val errors: String = compileErrors("""
-      case class A()
-      case class B()
-      case class C(a: A, b: B)
-
-      // not always used
-      case class D(c: C)
-      case class E(a: A, c: C)
-
-      trait Base {
-        val aA: A = A()
-      }
-
-      object Module extends Base {
-        val theA: A = A()
-        lazy val b: B = wire[B]
-        lazy val c: C = wire[C]
-      }
-
-      require(Module.c.a eq Module.theA)
-    """)
-    assert(errors.nonEmpty, "this macwire case now compiles: move it back to the supported cases")
+  test("inheritancePublicMembersInParent") {
+    val _ = MacwireTestCasesSpec.case_inheritancePublicMembersInParent
   }
 
   test("inheritanceSimpleDefsOkInTraits") {
@@ -1109,6 +1086,28 @@ object MacwireTestCasesSpec {
     }
 
     require(Module.c.a eq Module.publicA)
+  }
+
+  object case_inheritancePublicMembersInParent {
+    case class A()
+    case class B()
+    case class C(a: A, b: B)
+
+    // not always used
+    case class D(c: C)
+    case class E(a: A, c: C)
+
+    trait Base {
+      val aA: A = A()
+    }
+
+    object Module extends Base {
+      val theA: A = A()
+      lazy val b: B = wire[B]
+      lazy val c: C = wire[C]
+    }
+
+    require(Module.c.a eq Module.theA)
   }
 
   def case_inheritanceSimpleDefsOkInTraits(): Unit = {
