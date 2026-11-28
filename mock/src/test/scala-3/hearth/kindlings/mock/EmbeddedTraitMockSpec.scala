@@ -1,8 +1,8 @@
 package hearth.kindlings.mock
 
-/** ScalaMock's `MockTest` "mock an embedded trait": a member whose type is an inner trait of the mocked trait
-  * (`def referencesEmbedded(): Embedded`): not supported on Scala 2 nor 3. Only here: on Scala 2 the error comes from
-  * the `refchecks` phase, which `compileErrors` does not run.
+/** ScalaMock's `MockTest` "mock an embedded trait": a member whose type is an inner trait of the mocked trait (`def
+  * referencesEmbedded(): Embedded`): not supported on Scala 2 nor 3. Only here: on Scala 2 the error comes from the
+  * `refchecks` phase, which `compileErrors` does not run.
   */
 final class EmbeddedTraitMockSpec extends hearth.MacroSuite {
 
