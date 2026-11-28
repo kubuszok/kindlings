@@ -3,7 +3,7 @@ package hearth.kindlings.benchmarks
 import cats.arrow.FunctionK
 import cats.data.{EitherT, Kleisli, Tuple2K}
 import cats.tagless.{FunctorK, SemigroupalK}
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 
 import java.util.concurrent.TimeUnit
 
@@ -30,7 +30,7 @@ object TaglessBenchInstances {
   }
 
   object kindlings {
-    import hearth.kindlings.catstaglessderivation._
+    import hearth.kindlings.catstaglessderivation.*
     val functorK: FunctorK[TaglessBenchAlg] = KindlingsFunctorK.derived[TaglessBenchAlg]
     val semigroupalK: SemigroupalK[TaglessBenchAlg] = KindlingsSemigroupalK.derived[TaglessBenchAlg]
   }
@@ -48,7 +48,7 @@ object TaglessBenchInstances {
 @Measurement(iterations = 10, time = 1)
 @Fork(2)
 class CatsTaglessBenchmark {
-  import TaglessBenchInstances._
+  import TaglessBenchInstances.*
 
   private val kindlingsMapped = kindlings.functorK.mapK(base)(toList)
   private val catsTaglessMapped = catsTagless.functorK.mapK(base)(toList)
