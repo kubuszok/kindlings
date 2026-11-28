@@ -65,6 +65,10 @@ The target itself is built from its **public primary constructor** (or, failing 
 `apply`, or a companion `resource` factory — see below). Acquisition happens in the order the dependencies are given and
 release happens in reverse, exactly as if you had written the nested `flatMap`s by hand.
 
+A dependency whose type is the target itself is used as the result (`wireResource[F, B](b)` gives `Resource.pure(b)`).
+Its own dependencies are then whatever the caller built them with, not lifecycle-managed. macwire's `autowire` always
+rebuilds the target instead, so the same call fails there on the target's missing constructor arguments.
+
 ```scala
 import cats.effect.{Resource, SyncIO}
 

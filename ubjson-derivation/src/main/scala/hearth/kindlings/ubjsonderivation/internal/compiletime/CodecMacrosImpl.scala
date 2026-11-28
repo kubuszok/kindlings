@@ -55,8 +55,9 @@ trait CodecMacrosImpl
     configExpr.semiEval.toOption.filter(usableAtCompileTime)
 
   /** The name mappers of a config evaluated at compile time are called at compile time. `semiEval` refuses user lambdas
-    * it cannot run (e.g. a `PartialFunction` name mapper, docs/research/hearth-gap-semieval-local-vals-and-vars.md
-    * section 4), but a lambda it can run may still throw when called: such configs are runtime configs.
+    * it cannot run (bodies using `match` - e.g. a `PartialFunction` name mapper -, `if`, loops, `try`, `return`,
+    * assignments or local definitions), but a lambda it can run may still throw when called: such configs are runtime
+    * configs.
     */
   private def usableAtCompileTime(config: UBJsonConfig): Boolean =
     scala.util.Try {

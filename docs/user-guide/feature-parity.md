@@ -737,6 +737,7 @@ against kindlings-di (`di/src/test/scala*/hearth/kindlings/di/upstream/`).
 | Untyped `val x = wire[X]` on Scala 2 | Yes | No (needs `: X`) | Difference (Hearth, `docs/research/hearth-bug-scala2-untyped-val-enclosing-scope.md`) |
 | Request/session scopes (JVM proxies) | Yes | No | Not ported (cross-platform module) |
 | `DI.plan` (storage strategies, construction overrides, wiring graph) | No | Yes | Improvement |
+| `DICats.wireResource` (macwire `autocats.autowire`) given an instance of the target type | Rebuilds the target from its constructor (fails without its arguments) | Uses that instance as the result | Difference |
 | Scala.js / Scala Native | No | Yes | Improvement |
 
 ---
