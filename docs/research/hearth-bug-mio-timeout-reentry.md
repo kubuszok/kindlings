@@ -120,3 +120,18 @@ FAQ.
 shared tests with the explicit type (the only form that compiles); the failing form is in a comment there, because a
 test that does not compile would break every other test of the module. When Hearth is fixed, drop the type ascription
 in that test.
+
+## The same bug through a summoned implicit (Scala 2 and 3)
+
+A user report (2026-11, Kindlings 0.4.0, Hearth 0.4.5) hit it on both Scala versions without any sealed trait: a
+library's own auto-derivation entry point built on Kindlings (`inline implicit def auto[A](using Mirror.Of[A]):
+Exported[Encoder[A]] = Exported(KindlingsEncoder.derived[A])`) is found while Kindlings searches the instance of a
+field (`Page.enc[A](implicit a: Encoder[A])` needing `Encoder[Item]`), so its expansion starts inside the running one.
+The assertion was not reported at all: the failed implicit search was taken for "not found" and the field was derived
+structurally.
+
+With Hearth 985e5e6 (the snapshot Kindlings uses) such an expansion runs with its own state (`MIO.runOwnedBy`): the
+assertion in `withMioTimeout` is still there in 0.4.5-19, but it only fires when the SAME expansion (`runOwner eq this`,
+the macro bundle's `Environment`) re-enters its run. `integration-tests` `NestedDerivationEntryPointSpec` covers the
+reported shape (the entry point is a macro compiled before the tests, as on Scala 2 it has to be). Kindlings also no
+longer reads a crashed candidate as "not found": see `hearth-gap-summon-with-givens.md`.

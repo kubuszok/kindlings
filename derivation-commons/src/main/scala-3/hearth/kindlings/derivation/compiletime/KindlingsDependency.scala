@@ -63,13 +63,30 @@ object KindlingsDependency {
   def placeholder[T](index: Expr[Int])(using t: Type[T], q: Quotes): Expr[T] = {
     import q.reflect.*
     val marker = Symbol.requiredClass(markerClassNames(index.valueOrAbort))
-    def isMarkerFor(tpe: TypeRepr, typeClass: TypeRepr): Boolean = tpe.dealias match {
-      case AppliedType(markerCtor, List(f)) => markerCtor.typeSymbol == marker && f.typeSymbol == typeClass.typeSymbol
-      case _                                => false
+    def components(tpe: TypeRepr): List[TypeRepr] = tpe.dealias match {
+      case AndType(left, right) => components(left) ++ components(right)
+      case other                => List(other)
     }
-    TypeRepr.of[T].dealias match {
-      case AppliedType(typeClass, List(AndType(left, right)))
-          if isMarkerFor(right, typeClass) || isMarkerFor(left, typeClass) =>
+    // `B & KindlingsDependencyN[TC]` with the type class itself as the marker's argument, also in the instance a
+    // candidate asks for (`Encoder[B & Marker[Encoder]]`); a type lambda inferred for `F` (`Exported[T]` in circe's
+    // `importedEncoder`, `C[A] => Iterable[A]` in its `encodeIterable`, through covariance) is not the type class
+    def isTypeLambda(tpe: TypeRepr): Boolean = tpe.dealias match {
+      case _: TypeLambda => true
+      case _             => false
+    }
+    def isMarkerFor(tpe: TypeRepr, typeClass: TypeRepr): Boolean = tpe match {
+      case AppliedType(markerCtor, List(f)) =>
+        markerCtor.typeSymbol == marker && typeClass.typeSymbol.isClassDef && !isTypeLambda(f) &&
+        f.typeSymbol == typeClass.typeSymbol
+      case _ => false
+    }
+    // `F[X & Marker[F]]` with `F` inferred as a type lambda (`[A] =>> Encoder[A]`) is not reduced by itself
+    def reduced(tpe: TypeRepr): TypeRepr = tpe.dealias match {
+      case AppliedType(ctor, arguments) if isTypeLambda(ctor) => reduced(ctor.appliedTo(arguments))
+      case other                                              => other
+    }
+    reduced(TypeRepr.of[T]) match {
+      case AppliedType(typeClass, List(argument)) if components(argument).exists(isMarkerFor(_, typeClass)) =>
         '{ null.asInstanceOf[T] }
       case _ => report.errorAndAbort(s"${TypeRepr.of[T].show} is not a Kindlings dependency placeholder")
     }

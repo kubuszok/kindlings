@@ -330,6 +330,18 @@ always treated as runtime configs, whether their classes are compiled in the sam
 - With `withEncodingOnly`, the codec's `nullValue` throws `NotImplementedError` too (it is a part of decoding), as in
   jsoniter-scala.
 - A user-provided implicit `JsonKeyCodec` takes precedence over the built-in key types, also for `String` keys.
+- A user-provided **generic** codec is used for a field also when the codecs it needs have to be derived:
+  with `implicit def codec[A](implicit a: JsonValueCodec[A]): JsonValueCodec[Page[A]]` in `Page`'s companion, a field
+  `Page[Item]` (or `Page[Int]`: jsoniter-scala has no implicit codecs of built-in types) uses it, with a codec of
+  `Item` derived by Kindlings (a value of the derived codec; one that only encodes for the encoder and one that only
+  decodes for the decoder, so the user's codec must not decode with the codec it got while encoding). Recursive types
+  work (`case class Tree(children: Page[Tree])`). Before, such a field was silently derived structurally. Not completed
+  (derived structurally, as before): codecs of other type classes or of types that are not type arguments of the field's
+  type, and types that are not case classes, case objects, sealed hierarchies or enums; put the nested codecs in scope
+  as values for those (`implicit val item: JsonValueCodec[Item] = KindlingsJsonValueCodec.derived[Item]`). See
+  [Instances you provide](circe-derivation.md#instances-you-provide) for the details, which are shared.
+- If the search for a codec fails because the macro of a candidate throws an exception, the derivation fails with the
+  reason (Scala 3; Scala 2 reports the exception itself) instead of deriving the type structurally.
 
 ## Annotations
 

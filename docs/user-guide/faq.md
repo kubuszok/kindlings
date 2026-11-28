@@ -104,6 +104,36 @@ holding a derived instance an explicit type:
 object Other { val encoder: Encoder[Http] = KindlingsEncoder.derived[Http] } // not `val encoder = ...`
 ```
 
+The same bug affected a derivation started from inside another one by an implicit macro, e.g. a library's own
+auto-derivation entry point built on Kindlings (`inline implicit def auto[A](using Mirror.Of[A]): Exported[Encoder[A]] =
+Exported(KindlingsEncoder.derived[A])`) found while Kindlings searches the instance of a field. There the error was
+not even shown: the failed search was taken for "no instance", and the field was derived structurally. Both are fixed
+in the release after 0.4.0, which also turns a crash of a candidate's macro during an implicit search into a compile
+error (see the next question).
+
+## Why is my generic instance not used for a field (the field is derived structurally)?
+
+Kindlings uses an instance found by implicit search for a field instead of deriving its type. Up to 0.4.0 a
+**generic** instance, `implicit def enc[A](implicit a: Encoder[A]): Encoder[Page[A]]`, was only used when its
+dependencies already existed: for `case class HoldsItems(page: Page[Item])` with no `Encoder[Item]` in scope,
+`Encoder[Page[Item]]` could not be found, and `Page[Item]` was derived structurally - a different JSON, no error.
+
+Since the release after 0.4.0, Kindlings (circe and jsoniter-scala derivation) completes such an instance: it derives
+the instances of the field type's type arguments that have none (`Item`, or the type being derived for a recursive
+type) and passes them to your instance. It does not complete instances that need another type class
+(`Encoder.AsObject[A]`, `Show[A]`) or instances of types that are not type arguments of the field's type
+(`Encoder[List[A]]`). For those, and on 0.4.0, put the nested instances in scope as values before deriving:
+
+```scala
+implicit val item: Encoder[Item] = KindlingsEncoder.derived[Item]
+val holdsItems: Encoder[HoldsItems] = KindlingsEncoder.derived[HoldsItems] // uses Page.enc(item)
+```
+
+If a derivation fails with `The implicit search for X failed because the macro expansion of a candidate crashed`, an
+implicit macro (yours or a library's) threw an exception while Kindlings searched for an instance of `X`: the message
+contains the exception. Kindlings stops there instead of deriving `X` structurally, which could silently change the
+result. (On Scala 2 the compiler reports the exception itself.)
+
 ## Why does Scala 3 crash with "missing outer accessor in class X"?
 
 A Hearth bug, fixed after Kindlings 0.4.0 (in the Hearth version after 0.4.5): deriving for a sealed trait declared
