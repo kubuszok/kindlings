@@ -801,7 +801,7 @@ trait ErasedHktSupport
       implicit val IntType: Type[Int] = ErasedIntType
       val whole: ?? = lam.any.as_??
       import whole.Underlying as T
-      (Enum.parse[T].toOption, Enum.parse(using lam.int).toOption, Enum.parse(using lam.string).toOption) match {
+      (parseEnum[T].toOption, parseEnum(using lam.int).toOption, parseEnum(using lam.string).toOption) match {
         case (Some(enumAny), Some(enumInt), Some(enumString)) =>
           val childrenAny = enumAny.directChildren.toList
           val childrenInt = enumInt.directChildren.toList

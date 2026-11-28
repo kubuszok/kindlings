@@ -14,7 +14,7 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
 
   object ArbitraryHandleAsEnumRule extends ArbitraryDerivationRule("handle as enum when possible") {
     def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Expr[Gen[A]]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumData) =>
           Log.info(s"Handling ${Type[A].prettyPrint} as enum") >>
             deriveEnumArbitrary[A](enumData).map(Rule.matched(_))
@@ -94,7 +94,7 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
               .isDefined
           )
             None
-          else Enum.parse[C].toOption
+          else parseEnum[C].toOption
         nested match {
           case Some(nestedEnum) =>
             flattenNestedSealed[C](nestedEnum.directChildren.toList, depth + 1).asInstanceOf[List[(String, ??<:[A])]]

@@ -146,7 +146,7 @@ trait DecoderMacrosImpl
             // on (so that it is flattened when used as the instance of an intermediate sealed trait).
             val sumMarker: Option[(Expr[List[String]], Expr[List[Decoder[Any]]])] =
               if (helperOpt.isDefined && isMarkedSum[A])
-                Enum.parse[A].toOption.map { enumm =>
+                parseEnum[A].toOption.map { enumm =>
                   val entries = decoderSumEntries[A](enumm)
                   val names = entries.map(_._1).foldRight(Expr.quote(List.empty[String])) { (n, acc) =>
                     Expr.quote(Expr.splice(Expr(n)) :: Expr.splice(acc))

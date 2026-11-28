@@ -119,7 +119,7 @@ trait SchemaHandleAsMapRuleImpl {
       * `adtLeafClassNameMapper`).
       */
     private def enumKeyToString[A: SchemaCtx, K: Type](implicit stringT: Type[String]): Option[Expr[K => String]] =
-      Enum.parse[K].toOption.flatMap { enumm =>
+      parseEnum[K].toOption.flatMap { enumm =>
         val children: List[(String, ??<:[K])] =
           if (sctx[A].jsonCfg.flattensNestedSubtypes)
             StableChildrenOrder

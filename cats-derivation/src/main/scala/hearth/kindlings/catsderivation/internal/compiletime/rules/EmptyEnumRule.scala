@@ -17,7 +17,7 @@ trait EmptyEnumRuleImpl {
       */
     @scala.annotation.nowarn("msg=is never used|is unchecked|Non local returns")
     def apply[A: EmptyCtx]: MIO[Rule.Applicability[Expr[A]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumm) =>
           val children = enumm.exhaustiveChildren match {
             case Some(m) =>

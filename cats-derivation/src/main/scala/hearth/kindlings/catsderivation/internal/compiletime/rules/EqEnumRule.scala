@@ -10,7 +10,7 @@ trait EqEnumRuleImpl {
 
   object EqEnumRule extends EqDerivationRule("Eq as enum") {
     def apply[A: EqCtx]: MIO[Rule.Applicability[Expr[Boolean]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumm) =>
           implicit val BooleanType: Type[Boolean] = EqTypes.Boolean
           val defBuilder = ValDefBuilder.ofDef2[A, A, Boolean](s"eqv_${Type[A].shortName}")

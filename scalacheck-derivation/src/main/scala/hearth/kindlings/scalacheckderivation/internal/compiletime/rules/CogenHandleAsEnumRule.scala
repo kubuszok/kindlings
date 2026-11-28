@@ -14,7 +14,7 @@ trait CogenHandleAsEnumRuleImpl { this: CogenMacrosImpl & MacroCommons & StdExte
 
   object CogenHandleAsEnumRule extends CogenDerivationRule("handle as enum when possible") {
     def apply[A: CogenCtx]: MIO[Rule.Applicability[Expr[Cogen[A]]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumData) =>
           Log.info(s"Handling ${Type[A].prettyPrint} as enum") >>
             deriveEnumCogen[A](enumData).map(Rule.matched(_))

@@ -223,18 +223,6 @@ trait CodecMacrosImpl
       .orElse(of(Type.ByteCodec))
   }
 
-  /** Scala 3 only sees the values of a Java enum read from a class file once the infos of its constants were completed:
-    * an enum none of whose constants is referred to by the code being compiled would have no children (and would not be
-    * an enum for Hearth). See docs/research/hearth-findings-jsoniter-parity-2026-11.md (4).
-    */
-  protected def completeJavaEnum[A: Type]: Unit = ()
-
-  /** `Enum.parse`, after [[completeJavaEnum]]. */
-  private[compiletime] def parseEnum[A: Type] = {
-    completeJavaEnum[A]
-    Enum.parse[A]
-  }
-
   /** Java enums, including Scala 3 enums extending `java.lang.Enum` (which Hearth's `isJavaEnum` does not report). */
   private[compiletime] def isJavaEnumType[A: Type]: Boolean =
     Type[A].isJavaEnum || Type[A] <:< Type.of[java.lang.Enum[?]]

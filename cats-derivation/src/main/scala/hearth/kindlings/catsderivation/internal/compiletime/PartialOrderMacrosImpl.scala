@@ -251,7 +251,7 @@ trait PartialOrderMacrosImpl extends StrictDerivationSupport with InstanceScopeS
 
   object PartialOrderEnumRule extends PartialOrderDerivationRule("PartialOrder as enum") {
     def apply[A: PartialOrderCtx]: MIO[Rule.Applicability[Expr[Double]]] =
-      Enum.parse[A].toEither match {
+      parseEnum[A].toEither match {
         case Right(enumm) =>
           implicit val DoubleType: Type[Double] = PartialOrderTypes.Double
           val defBuilder = ValDefBuilder.ofDef2[A, A, Double](s"partialCompare_${Type[A].shortName}")

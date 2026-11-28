@@ -8,7 +8,9 @@ import hearth.fp.effect.*
   * Replaces the historical `throw new RuntimeException(...)` calls (which crashed the compiler) with proper
   * [[CatsDerivationError]] failures reported through Hearth's MIO error channel.
   */
-private[compiletime] trait CatsDerivationErrorSupport extends hearth.kindlings.derivation.compiletime.MethodFolds {
+private[compiletime] trait CatsDerivationErrorSupport
+    extends hearth.kindlings.derivation.compiletime.MethodFolds
+    with hearth.kindlings.derivation.compiletime.JavaEnumSupport {
   this: MacroCommons =>
 
   import CatsDerivationError.*
@@ -42,7 +44,7 @@ private[compiletime] trait CatsDerivationErrorSupport extends hearth.kindlings.d
 
   /** Parses `A` as an enum or fails the derivation with [[CatsDerivationError.CannotParseEnum]]. */
   final protected def parseEnumMIO[A: Type](label: => String): MIO[Enum[A]] =
-    Enum.parse[A].toEither match {
+    parseEnum[A].toEither match {
       case Right(e)  => MIO.pure(e)
       case Left(err) => failDerivation(CannotParseEnum(label, err.toString))
     }

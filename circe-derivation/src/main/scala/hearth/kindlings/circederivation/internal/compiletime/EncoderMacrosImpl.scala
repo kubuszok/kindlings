@@ -219,9 +219,9 @@ trait EncoderMacrosImpl
         case _ =>
           if (Type[A].isEnumeration || Type[A].isJavaEnum)
             Some("an Enumeration/Java enum is not a sealed product hierarchy")
-          else if (CaseClass.parse[A].toOption.isDefined && Enum.parse[A].toOption.isEmpty) None
+          else if (CaseClass.parse[A].toOption.isDefined && parseEnum[A].toOption.isEmpty) None
           else
-            Enum.parse[A].toOption match {
+            parseEnum[A].toOption match {
               case Some(enumm) =>
                 val leaves = flattenedChildren[A](enumm)(_ => false)
                 val allSingletons = leaves.forall { case (_, c) => SingletonValue.unapply(c.Underlying).isDefined }

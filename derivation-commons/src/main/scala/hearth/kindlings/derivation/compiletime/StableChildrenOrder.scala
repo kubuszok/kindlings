@@ -14,7 +14,9 @@ import hearth.typed.ChildrenOrder
   *
   * So on Scala 2 every module uses Hearth's `Type.directChildrenInOrder(ChildrenOrder.ByName)` (simple name in natural
   * order, then the full name; the leaves of nested sealed hierarchies come depth-first in that order), and on Scala 3
-  * the declaration order. Java enums keep their constants' declaration order (it is stored in the class file);
+  * the declaration order. Java enums are put in their constants' declaration order (the order of the static fields in
+  * the class file): on Scala 3 Hearth lists them in the order in which the compiler completed them, the constants
+  * referred to by the compiled code first (docs/research/hearth-bug-java-enum-unreferenced-constants.md).
   * `scala.Enumeration` values keep the order Hearth reports.
   *
   * Usage, from a macro bundle trait `MyRuleImpl { this: MacroCommons => ... }`:
@@ -39,7 +41,11 @@ object StableChildrenOrder {
       A: mc.Type[A]
   ): List[(String, mc.??<:[A])] = {
     import mc.*
-    if (Environment.isScala3 || A.isJavaEnum || A.isEnumeration) children
+    // Java enums: the declaration order of the constants (on Scala 3 Hearth reports the order in which the compiler
+    // completed them, which puts the constants referred to by the compiled code first)
+    val javaEnumConstants = if (A.isJavaEnum) JavaEnumConstants(mc)(A.asUntyped) else None
+    if (javaEnumConstants.isDefined) inOrderOf(children, javaEnumConstants.getOrElse(Nil))(_._1 == _)
+    else if (Environment.isScala3 || A.isJavaEnum || A.isEnumeration) children
     else {
       // Every subtype of A (each direct child, followed by the subtypes of a sealed one), depth-first, by name.
       def byName(tpe: ??, depth: Int): List[??] = {

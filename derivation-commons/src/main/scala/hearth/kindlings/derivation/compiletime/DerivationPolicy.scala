@@ -32,7 +32,7 @@ import hearth.fp.effect.*
   * `;` and `|` are never split by either compiler, so the value arrives intact and we split it ourselves. (Indexed keys
   * would also work but are noisier.)
   */
-trait DerivationPolicy { this: MacroCommons =>
+trait DerivationPolicy extends JavaEnumSupport { this: MacroCommons =>
   // $COVERAGE-OFF$
 
   /** Shared with [[DerivationTimeout]] - the per-module settings namespace (e.g. `fastShowPrettyDerivation`). */
@@ -141,7 +141,7 @@ trait DerivationPolicy { this: MacroCommons =>
     * not also handled as one of "the parts that always work" (collection, `Option`, `Either`, value type, tuple).
     */
   private def isStructuralDerivationTarget[A: Type]: Boolean = {
-    val structural = Type[A].isCase || Type[A].isCaseObject || Enum.parse[A].toOption.isDefined
+    val structural = Type[A].isCase || Type[A].isCaseObject || parseEnum[A].toOption.isDefined
     structural && !Type[A].isTuple && !Type[A].isNamedTuple && (this match {
       case std: hearth.std.StdExtensions =>
         // `this` is the platform MacroCommons, which always mixes in StdExtensions: same `Type` at runtime.
