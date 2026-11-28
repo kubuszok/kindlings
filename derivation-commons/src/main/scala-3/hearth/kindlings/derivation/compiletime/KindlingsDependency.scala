@@ -9,35 +9,43 @@ import scala.quoted.*
 
 sealed trait KindlingsDependency0[F[_]]
 object KindlingsDependency0 {
-  inline given provided[T]: T = KindlingsDependency.provide[T](0)
+  inline given provided[F[_], X]: F[X & KindlingsDependency0[F]] =
+    KindlingsDependency.provide[F[X & KindlingsDependency0[F]]](0)
 }
 sealed trait KindlingsDependency1[F[_]]
 object KindlingsDependency1 {
-  inline given provided[T]: T = KindlingsDependency.provide[T](1)
+  inline given provided[F[_], X]: F[X & KindlingsDependency1[F]] =
+    KindlingsDependency.provide[F[X & KindlingsDependency1[F]]](1)
 }
 sealed trait KindlingsDependency2[F[_]]
 object KindlingsDependency2 {
-  inline given provided[T]: T = KindlingsDependency.provide[T](2)
+  inline given provided[F[_], X]: F[X & KindlingsDependency2[F]] =
+    KindlingsDependency.provide[F[X & KindlingsDependency2[F]]](2)
 }
 sealed trait KindlingsDependency3[F[_]]
 object KindlingsDependency3 {
-  inline given provided[T]: T = KindlingsDependency.provide[T](3)
+  inline given provided[F[_], X]: F[X & KindlingsDependency3[F]] =
+    KindlingsDependency.provide[F[X & KindlingsDependency3[F]]](3)
 }
 sealed trait KindlingsDependency4[F[_]]
 object KindlingsDependency4 {
-  inline given provided[T]: T = KindlingsDependency.provide[T](4)
+  inline given provided[F[_], X]: F[X & KindlingsDependency4[F]] =
+    KindlingsDependency.provide[F[X & KindlingsDependency4[F]]](4)
 }
 sealed trait KindlingsDependency5[F[_]]
 object KindlingsDependency5 {
-  inline given provided[T]: T = KindlingsDependency.provide[T](5)
+  inline given provided[F[_], X]: F[X & KindlingsDependency5[F]] =
+    KindlingsDependency.provide[F[X & KindlingsDependency5[F]]](5)
 }
 sealed trait KindlingsDependency6[F[_]]
 object KindlingsDependency6 {
-  inline given provided[T]: T = KindlingsDependency.provide[T](6)
+  inline given provided[F[_], X]: F[X & KindlingsDependency6[F]] =
+    KindlingsDependency.provide[F[X & KindlingsDependency6[F]]](6)
 }
 sealed trait KindlingsDependency7[F[_]]
 object KindlingsDependency7 {
-  inline given provided[T]: T = KindlingsDependency.provide[T](7)
+  inline given provided[F[_], X]: F[X & KindlingsDependency7[F]] =
+    KindlingsDependency.provide[F[X & KindlingsDependency7[F]]](7)
 }
 
 object KindlingsDependency {

@@ -23,6 +23,7 @@ trait CodecMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with JsoniterDerivationPolicy
+    with hearth.kindlings.derivation.compiletime.UserInstances
     with ProductTypes
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
@@ -440,18 +441,21 @@ trait CodecMacrosImpl
       configExpr: Expr[JsoniterConfig],
       cache: MLocal[ValDefsCache],
       selfType: Option[??],
-      evConfig: Option[JsoniterConfig]
+      evConfig: Option[JsoniterConfig],
+      perCall: Boolean = false
   ): MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
     implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
     // the call built for these stubs is discarded: only the helper is used
-    val ctx = EncoderCtx.from[A](
-      Expr.quote(null.asInstanceOf[A]),
-      Expr.quote(null.asInstanceOf[JsonWriter]),
-      configExpr,
-      cache,
-      selfType,
-      evConfig
-    )
+    val ctx = EncoderCtx
+      .from[A](
+        Expr.quote(null.asInstanceOf[A]),
+        Expr.quote(null.asInstanceOf[JsonWriter]),
+        configExpr,
+        cache,
+        selfType,
+        evConfig
+      )
+      .copy(rootConfig = Some(configExpr), perCall = perCall)
     deriveEncoderRecursively[A](using ctx) >> ctx.getHelper[A].map(_.get)
   }
 
@@ -461,17 +465,20 @@ trait CodecMacrosImpl
       configExpr: Expr[JsoniterConfig],
       cache: MLocal[ValDefsCache],
       selfType: Option[??],
-      evConfig: Option[JsoniterConfig]
+      evConfig: Option[JsoniterConfig],
+      perCall: Boolean = false
   ): MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] = {
     implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
-    val ctx = DecoderCtx.from[A](
-      Expr.quote(null.asInstanceOf[JsonReader]),
-      configExpr,
-      cache,
-      selfType,
-      evConfig,
-      Some(configExpr)
-    )
+    val ctx = DecoderCtx
+      .from[A](
+        Expr.quote(null.asInstanceOf[JsonReader]),
+        configExpr,
+        cache,
+        selfType,
+        evConfig,
+        Some(configExpr)
+      )
+      .copy(perCall = perCall)
     deriveDecoderRecursively[A](using ctx) >> ctx.getHelper[A].map(_.get)
   }
 
@@ -869,7 +876,7 @@ trait CodecMacrosImpl
           val evConfig: Option[JsoniterConfig] = semiEvalConfig(configExpr)
 
           val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] =
-            topLevelEncoder[A](configExpr, cache, selfType, evConfig)
+            topLevelEncoder[A](configExpr, cache, selfType, evConfig, perCall = true)
 
           val encFn = runSafe {
             for {
@@ -920,7 +927,7 @@ trait CodecMacrosImpl
           val evConfig: Option[JsoniterConfig] = semiEvalConfig(configExpr)
 
           val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] =
-            topLevelDecoder[A](configExpr, cache, selfType, evConfig)
+            topLevelDecoder[A](configExpr, cache, selfType, evConfig, perCall = true)
 
           val nullMIO: MIO[Expr[A]] = deriveNullValue[A](configExpr, evConfig)
 
@@ -1254,7 +1261,12 @@ trait CodecMacrosImpl
       // As in jsoniter-scala, `config.isStringified` applies from the root value down to the first case class / ADT
       // (`None`: inherited from the config); a case class field is stringified only by its own `@stringified`
       // (`Some(true)`, also inside options, collections, map values and tuples) and `Some(false)` otherwise.
-      stringified: Option[Boolean] = None
+      stringified: Option[Boolean] = None,
+      // The config expression of the entry point (`config` is a parameter of the cached defs), see DecoderCtx.
+      rootConfig: Option[Expr[JsoniterConfig]] = None,
+      // The inline writeToString: the cached definitions are evaluated on every call, so the codecs completed for a
+      // user's codec (see `completeUserCodecForEncoder`) are not lazy vals there.
+      perCall: Boolean = false
   ) {
 
     /** Whether numbers/booleans are written as strings: `Some` when known at compile time. */
@@ -1434,7 +1446,9 @@ trait CodecMacrosImpl
       stringified: Option[Boolean] = None,
       // The config expression of the entry point (`config` is a parameter of the cached defs): what per-instance
       // `lazy val`s of the codec (computed once, not per call) can read when the config is only known at runtime.
-      rootConfig: Option[Expr[JsoniterConfig]] = None
+      rootConfig: Option[Expr[JsoniterConfig]] = None,
+      // The inline readFromString, see EncoderCtx.perCall.
+      perCall: Boolean = false
   ) {
 
     /** Whether numbers/booleans are read from strings: `Some` when known at compile time. */
@@ -1559,19 +1573,149 @@ trait CodecMacrosImpl
       case method if method.isImplicit => method.asUntyped
     }
 
-  // Cache for summonExprIgnoring results — avoids re-summoning the same type.
-  // Key: UntypedType, Value: Right(expr) on success, Left(reason) on failure.
-  private val summonCodecCache: scala.collection.mutable.Map[UntypedType, Either[String, Any]] =
+  // Cache for the implicit searches of JsonValueCodec[A] — avoids re-summoning the same type.
+  private val summonCodecCache: scala.collection.mutable.Map[UntypedType, Any] =
     scala.collection.mutable.Map.empty
+
+  /** Summon JsonValueCodec[A] with caching, telling a crashed search (see `UserInstances`) from a missing codec. */
+  private[compiletime] def summonJsonValueCodecSearch[A: Type]: UserInstanceSearch[JsonValueCodec[A]] = {
+    implicit val CodecA: Type[JsonValueCodec[A]] = CTypes.JsonValueCodec[A]
+    summonCodecCache
+      .getOrElseUpdate(Type[A].asUntyped, summonUserInstance[JsonValueCodec[A]](codecIgnoredImplicits))
+      .asInstanceOf[UserInstanceSearch[JsonValueCodec[A]]]
+  }
 
   /** Summon JsonValueCodec[A] with caching. Returns cached result on repeated calls for the same type. */
   private[compiletime] def summonJsonValueCodecCached[A: Type]: Either[String, Expr[JsonValueCodec[A]]] =
-    summonCodecCache
-      .getOrElseUpdate(
-        Type[A].asUntyped,
-        CTypes.JsonValueCodec[A].summonExprIgnoring(codecIgnoredImplicits*).toEither
-      )
-      .asInstanceOf[Either[String, Expr[JsonValueCodec[A]]]]
+    summonJsonValueCodecSearch[A].toEither
+
+  /** `value` as a lazy val of the codec (`key` and the type identify it), or as it is in the inline entry points. */
+  private def instanceScoped[T: Type](
+      cache: MLocal[ValDefsCache],
+      perCall: Boolean,
+      key: String,
+      name: String,
+      value: Expr[T]
+  ): MIO[Expr[T]] =
+    if (perCall) MIO.pure(value)
+    else
+      cache.get0Ary[T](key).flatMap {
+        case Some(cached) => MIO.pure(cached)
+        case None         =>
+          cache.buildCachedWith(key, ValDefBuilder.ofLazy[T](name))(_ => value) >> cache.get0Ary[T](key).map(_.get)
+      }
+
+  /** A user's generic codec for `A` (e.g. `implicit def codec[X](implicit x: JsonValueCodec[X]):
+    * JsonValueCodec[Page[X]]`) that is not found only because the codecs of `A`'s type arguments do not exist, built
+    * with codecs derived here that only encode (the encoders of those types wrapped in codecs). A lazy val of the
+    * codec.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private[compiletime] def completeUserCodecForEncoder[A: EncoderCtx]: MIO[Option[Expr[JsonValueCodec[A]]]] =
+    ectx.rootConfig match {
+      case None             => MIO.pure(None)
+      case Some(rootConfig) =>
+        implicit val CodecA: Type[JsonValueCodec[A]] = CTypes.JsonValueCodec[A]
+        completeUserInstance[JsonValueCodec, A](CTypes.JsonValueCodec, codecIgnoredImplicits)(
+          new DependencyInstance[JsonValueCodec] {
+            def apply[B: Type]: MIO[Expr[JsonValueCodec[B]]] = {
+              implicit val CodecB: Type[JsonValueCodec[B]] = CTypes.JsonValueCodec[B]
+              implicit val KindlingsCodecB: Type[KindlingsJsonValueCodec[B]] = CTypes.KindlingsJsonValueCodec[B]
+              implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+              implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
+              implicit val UnitT: Type[Unit] = CTypes.Unit
+              // a root of its own for the user's codec (its numbers are stringified as the config says)
+              val ctx = ectx.nest[B](Expr.quote(null.asInstanceOf[B])).copy(stringified = None)
+              for {
+                _ <- deriveEncoderRecursively[B](using ctx)
+                helper <- ctx.getHelper[B]
+                encode = helper.get
+                codec <- instanceScoped[JsonValueCodec[B]](
+                  ectx.cache,
+                  ectx.perCall,
+                  "cached-encoding-dependency-codec",
+                  s"encodingCodec_${Type[B].shortName}",
+                  Expr
+                    .quote {
+                      hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories
+                        .lazyCodecInstance[B](
+                          null.asInstanceOf[B],
+                          (in: JsonReader, default: B) =>
+                            JsoniterDerivationUtils.encodingOnlyDecodeValue[B](in, default),
+                          (x: B, out: JsonWriter) => Expr.splice(encode(Expr.quote(x), Expr.quote(out), rootConfig))
+                        )
+                    }
+                    .upcast[JsonValueCodec[B]]
+                )
+              } yield codec
+            }
+          }
+        ).flatMap {
+          case Some(codec) =>
+            instanceScoped[JsonValueCodec[A]](
+              ectx.cache,
+              ectx.perCall,
+              "cached-completed-encoding-codec",
+              s"codec_${Type[A].shortName}",
+              codec
+            ).map(Some(_))
+          case None => MIO.pure(None)
+        }
+    }
+
+  /** As [[completeUserCodecForEncoder]], with codecs derived here that only decode. */
+  @scala.annotation.nowarn("msg=is never used")
+  private[compiletime] def completeUserCodecForDecoder[A: DecoderCtx]: MIO[Option[Expr[JsonValueCodec[A]]]] = {
+    implicit val CodecA: Type[JsonValueCodec[A]] = CTypes.JsonValueCodec[A]
+    val rootConfig = dctx.instanceConfig
+    completeUserInstance[JsonValueCodec, A](CTypes.JsonValueCodec, codecIgnoredImplicits)(
+      new DependencyInstance[JsonValueCodec] {
+        def apply[B: Type]: MIO[Expr[JsonValueCodec[B]]] = {
+          implicit val CodecB: Type[JsonValueCodec[B]] = CTypes.JsonValueCodec[B]
+          implicit val KindlingsCodecB: Type[KindlingsJsonValueCodec[B]] = CTypes.KindlingsJsonValueCodec[B]
+          implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+          implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
+          implicit val UnitT: Type[Unit] = CTypes.Unit
+          val ctx = dctx.nest[B](Expr.quote(null.asInstanceOf[JsonReader])).copy(stringified = None)
+          for {
+            _ <- deriveDecoderRecursively[B](using ctx)
+            helper <- ctx.getHelper[B]
+            decode = helper.get
+            nullValue <- deriveNullValue[B](rootConfig, dctx.evaluatedConfig)
+            codec <- instanceScoped[JsonValueCodec[B]](
+              dctx.cache,
+              dctx.perCall,
+              "cached-decoding-dependency-codec",
+              s"decodingCodec_${Type[B].shortName}",
+              Expr
+                .quote {
+                  hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories
+                    .lazyCodecInstance[B](
+                      Expr.splice(nullValue),
+                      (in: JsonReader, default: B) => {
+                        val _ = default
+                        Expr.splice(decode(Expr.quote(in), rootConfig))
+                      },
+                      (x: B, out: JsonWriter) => JsoniterDerivationUtils.decodingOnlyEncodeValue[B](x, out)
+                    )
+                }
+                .upcast[JsonValueCodec[B]]
+            )
+          } yield codec
+        }
+      }
+    ).flatMap {
+      case Some(codec) =>
+        instanceScoped[JsonValueCodec[A]](
+          dctx.cache,
+          dctx.perCall,
+          "cached-completed-decoding-codec",
+          s"codec_${Type[A].shortName}",
+          codec
+        ).map(Some(_))
+      case None => MIO.pure(None)
+    }
+  }
 
   // Debug counter to detect runaway decoder derivation — fail gracefully instead of OOM
   private var decoderDerivationCounter: Int = 0
