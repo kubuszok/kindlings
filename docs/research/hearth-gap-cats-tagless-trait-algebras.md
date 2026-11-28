@@ -54,7 +54,10 @@ source instance).
 ## 5. Scala 2: algebra type lambdas with extra type parameters
 
 `KindlingsFunctorK.derived[AlgWithExtraTP[*[_], String]]` (or a `type L[F[_]] = AlgWithExtraTP[F, String]` alias)
-fails on Scala 2 with "AlgWithExtraTP takes 2 type parameters, expected: 1": `Type.CtorK1.of[Alg]` reads the
-constructor from the `WeakTypeTag[Alg[Option]]` (`AlgWithExtraTP[Option, String]`) and keeps only its type constructor,
-and `Type.CtorK1.fromUntyped` of the lambda dealiases it the same way when applying it. On Scala 3 the type lambda
+fails on Scala 2 with "AlgWithExtraTP takes 2 type parameters, expected: 1". The cause (confirmed 2026-11-28 with a
+Hearth-only reproducer) is not `Type.CtorK1`: `Type.CtorK1.of[Alg]` keeps the alias / lambda, and `apply`,
+`applyTypeArgs` and `AnonymousInstance.parse` work. Scala 2 cross-quotes splice an HKT type parameter used inside
+`Expr.quote` as `Ident(ctor.asUntyped.typeSymbol)` (`Cache.forHKTType` in `CrossQuotesMacros.scala`), and `typeSymbol`
+turns the alias / lambda into the 2-parameter class, so the quote in `FunctorKTraitRule` expands to
+`functorKInstance[AlgWithExtraTP](...)`. Suggested fix: splice `TypeTree(asUntyped)`. On Scala 3 the type lambda
 `[F[_]] =>> AlgWithExtraTP[F, String]` works; a type alias for it fails like item 4.
