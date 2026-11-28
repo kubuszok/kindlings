@@ -11,7 +11,10 @@ final class MacwireJvmTestCasesSpec extends hearth.MacroSuite {
   // macwire's cases declare their classes in a block, so its messages show simple names: drop the prefix of the
   // classes declared in this suite (and `java.lang.`) before looking for macwire's fragments
   private def simpleNames(errors: String): String =
-    errors.replaceAll("\u001b\\[[0-9;]*m", "").replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "").replace("java.lang.", "")
+    errors
+      .replaceAll("\u001b\\[[0-9;]*m", "")
+      .replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "")
+      .replace("java.lang.", "")
 
   test("phantomConstructor (does not compile)") {
     val errors: String = compileErrors("""
@@ -103,7 +106,12 @@ final class MacwireJvmTestCasesSpec extends hearth.MacroSuite {
       wire[Target]
     """)
     assert(errors.nonEmpty, "expected a compilation error")
-    assert(simpleNames(errors).contains("Ambiguous constructors annotated with @javax.inject.Inject or @jakarta.inject.Inject for type [Target]"), errors)
+    assert(
+      simpleNames(errors).contains(
+        "Ambiguous constructors annotated with @javax.inject.Inject or @jakarta.inject.Inject for type [Target]"
+      ),
+      errors
+    )
   }
 
 }
