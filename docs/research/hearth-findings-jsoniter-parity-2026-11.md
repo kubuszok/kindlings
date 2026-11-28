@@ -60,7 +60,8 @@ type. Same family as `hearth-bug-enum-child-this-type-prefix.md`. Scala 2.13 fai
 
 ## 3. A Java enum nested in a Java class cannot be derived on Scala 3
 
-**Status:** OPEN (Scala 2.13 derives it). Asserted by `JsoniterUpstreamSpecOracleSpec` "gaps":
+**Status:** OPEN in Hearth `0.4.5-18-g99ac2ae-SNAPSHOT` (Scala 2.13 derives it). Asserted by
+`JsoniterUpstreamSpecOracleSpec` "gaps":
 
 ```scala
 KindlingsJsonValueCodec.derived[java.lang.Thread.State]
@@ -68,8 +69,34 @@ KindlingsJsonValueCodec.derived[java.lang.Thread.State]
 //   - assertion failed: expected a term symbol, but received class State
 ```
 
-(upstream's fixture is `Levels.InnerLevel`). Something asks for the term symbol / `termRef` of a symbol which is the
-nested enum's class (for a Java class nested in a class, `companionModule` is not a term).
+(upstream's fixture is `Levels.InnerLevel`).
+
+**Cause (confirmed 2026-11-28):** `Expr.singletonOf` on the enum TYPE itself, called by `SingletonValue.parse[A]` in the
+"handle as singleton" rules, which run before the enum rule. Full trace:
+`repro-details/thread-state-singletonOf-trace.txt`:
+
+```
+java.lang.AssertionError: assertion failed: expected a term symbol, but received class State
+  at scala.quoted.runtime.impl.QuotesImpl$reflect$Ref$.apply(QuotesImpl.scala:513)
+  at hearth.typed.ExprsScala3$Expr$.singletonOf(ExprsScala3.scala:256)
+  at hearth.typed.Classes$SingletonValue$.unapply(Classes.scala:220)
+  at hearth.typed.Classes$SingletonValue$.parse(Classes.scala:227)
+  at ...jsoniterderivation...EncoderHandleAsSingletonRule$.apply(EncoderHandleAsSingletonRule.scala:15)
+```
+
+The branch of `singletonOf` meant for Java enum constants (`sym.flags.is(Enum) && sym.flags.is(JavaStatic)` ->
+`Ref(sym)`) also matches the class symbol of a Java enum nested in a class: a nested Java enum is a static nested class
+(`Flags.Enum | Flags.Final | Flags.JavaDefined | Flags.JavaStatic`), while a top-level one has no `JavaStatic`. Minimal
+Hearth-only reproducer (`Expr.singletonOf[java.lang.Thread.State]` and `[java.lang.Character.UnicodeScript]` throw,
+`[java.math.RoundingMode]` gives `None`):
+
+```scala
+class ReproMacros(q: Quotes) extends hearth.MacroCommonsScala3(using q) {
+  def run[A: Type]: Expr[String] = Expr(scala.util.Try(Expr.singletonOf[A]).toString)
+}
+```
+
+Suggested fix: require a term symbol (`sym.isTerm`) in that branch.
 
 ## 4. A Java enum read from a class file has no children until its constants are completed (Scala 3)
 

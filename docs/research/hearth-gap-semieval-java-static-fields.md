@@ -1,30 +1,42 @@
 # Hearth gap: `semiEval` cannot read a qualified Java enum constant on Scala 3 ("Cannot resolve module")
 
-Status: **OPEN** (found 2026-11-28 with Hearth `0.4.4`-line snapshot pinned by Kindlings, Scala 3 only; Scala 2.13
+Status: **OPEN** (found 2026-11-28, still failing with Hearth `0.4.5-18-g99ac2ae-SNAPSHOT`, Scala 3 only; Scala 2.13
 evaluates it).
 
 ## Reproducer
 
-In a shared (`MacroCommons`) macro implementation:
+Verified 2026-11-28 with a Hearth-only macro against `0.4.5-18-g99ac2ae-SNAPSHOT` (output:
+`repro-details/semieval-qualified-java-enum-output.txt`). A qualified constant is typed as `Ident("FLOOR")` only when it
+is the **whole** argument of the macro call; inside an annotation, or nested in the arguments of another call, it stays
+a `Select`, and that is what fails:
+
+| Expression given to `semiEval` (Scala 3)                                              | Tree of the constant                                              | Result                                          |
+|---------------------------------------------------------------------------------------|-------------------------------------------------------------------|-------------------------------------------------|
+| macro argument `java.math.RoundingMode.FLOOR` (inline or not)                         | `Ident("FLOOR")`                                                  | `Right(FLOOR)`                                  |
+| `FLOOR` after `import java.math.RoundingMode.FLOOR` (from the original report, not re-run) | `Ident("FLOOR")`                                       | `Right(FLOOR)`                                  |
+| macro argument `Cfg.default.withDecimalConfig(8, 2, java.math.RoundingMode.HALF_UP)` | `Select(Select(Select(Ident("java"), "math"), "RoundingMode"), "HALF_UP")` | `Left(Cannot resolve module: java.math.RoundingMode)` |
+| annotation argument, `@ann(java.math.RoundingMode.FLOOR)` (primary or secondary constructor), via `Annotations.decodedConstructorArguments` | `Select(Select(Select(Ident("java"), "math"), "RoundingMode"), "FLOOR")` | `Left(Cannot resolve module: java.math.RoundingMode)` |
+
+(`Cfg` is a case class compiled outside the calling module mirroring `AvroConfig.withDecimalConfig`.) Scala 2.13
+evaluates the annotation argument (`AvroAvro4sParitySpec` takes the constant path there); the other rows were not run on
+2.13. In Kindlings: `@avroScalePrecision(8, 2, java.math.RoundingMode.FLOOR)` is not evaluable on Scala 3, and by the
+same tree shape neither is `AvroConfig.default.withDecimalConfig(8, 2, java.math.RoundingMode.HALF_UP)` (not run
+against `AvroConfig` itself), so the macro splices the argument / reads the config at runtime (correct, only slower).
+
+Minimal macro (Scala 3):
 
 ```scala
-def evalMode(mode: Expr[java.math.RoundingMode]): String =
-  mode.semiEval.fold(_.mkString(", "), _.toString)
+final class roundingOnly(roundingMode: java.math.RoundingMode) extends scala.annotation.StaticAnnotation
+
+class ReproMacros(q: Quotes) extends hearth.MacroCommonsScala3(using q) {
+  def annotationArgs[C: Type]: Expr[String] = {
+    val param = Type[C].primaryConstructor.get.parameters.flatten.head._2
+    Expr(param.annotations.map(ann => Annotations.decodedConstructorArguments(ann).toString).mkString)
+  }
+}
+// case class Primary(@roundingOnly(java.math.RoundingMode.FLOOR) amount: BigDecimal)
+// annotationArgs[Primary] == "Some(List(Left(Cannot resolve module: java.math.RoundingMode)))"
 ```
-
-called with:
-
-| Argument                                                     | Scala 2.13 | Scala 3                                              |
-|--------------------------------------------------------------|------------|------------------------------------------------------|
-| `java.math.RoundingMode.FLOOR` (qualified, a `Select`)       | `FLOOR`    | `Cannot resolve module: java.math.RoundingMode`      |
-| `FLOOR` after `import java.math.RoundingMode.FLOOR` (`Ident`) | `FLOOR`    | `FLOOR`                                              |
-
-Observed for the argument of an annotation read with `Annotations.decodedConstructorArguments`
-(`@avroScalePrecision(8, 2, java.math.RoundingMode.FLOOR)` gave `Left("Cannot resolve module: java.math.RoundingMode")`
-on Scala 3). The table is derived from the evaluator's code (below); by the same path, a config built with a qualified
-constant (`AvroConfig.default.withDecimalConfig(8, 2, java.math.RoundingMode.HALF_UP)`) should not be evaluable on
-Scala 3 either, so the macro falls back to reading that config at runtime (correct, only slower; not separately
-verified).
 
 ## Cause
 
