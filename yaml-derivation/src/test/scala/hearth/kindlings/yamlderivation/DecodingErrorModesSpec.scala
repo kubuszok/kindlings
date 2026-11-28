@@ -8,14 +8,14 @@ final class DecodingErrorModesSpec extends MacroSuite {
 
   private def node(yaml: String): Node =
     internal.runtime.YamlDerivationUtils.parseAndDecode[Node](yaml, n => Right(n)) match {
-    case Right(n)  => n
-    case Left(err) => throw new IllegalArgumentException(err.msg)
-  }
+      case Right(n)  => n
+      case Left(err) => throw new IllegalArgumentException(err.msg)
+    }
 
   private def paths(error: ConstructError): List[String] = YamlDecodingFailures.of(error).map(_.path)
 
   private def errorOf[A](result: Either[ConstructError, A]): ConstructError = result match {
-    case Left(error) => error
+    case Left(error)  => error
     case Right(value) => fail(s"expected a failure, got $value")
   }
 
@@ -58,17 +58,19 @@ final class DecodingErrorModesSpec extends MacroSuite {
     }
 
     test("withAccumulatingErrors / withFailFastErrors, kept by the other options and in equality") {
-      val accumulating = YamlConfig().withAccumulatingErrors
+      // one base: on Scala.js each `YamlConfig()` gets its own `identity` function instances (not equal)
+      val base = YamlConfig()
+      val accumulating = base.withAccumulatingErrors
       assert(accumulating.accumulatingErrors)
       assert(accumulating.withSnakeCaseMemberNames.withDiscriminator("t").accumulatingErrors)
       assert(accumulating.copy(useDefaults = false).accumulatingErrors)
       assert(!accumulating.withFailFastErrors.accumulatingErrors)
-      assert(accumulating != YamlConfig())
-      accumulating ==> YamlConfig().withAccumulatingErrors
-      accumulating.hashCode ==> YamlConfig().withAccumulatingErrors.hashCode
-      accumulating.withFailFastErrors ==> YamlConfig()
+      assert(accumulating != base)
+      accumulating ==> base.withAccumulatingErrors
+      accumulating.hashCode ==> base.withAccumulatingErrors.hashCode
+      accumulating.withFailFastErrors ==> base
       assert(accumulating.toString.contains("accumulatingErrors=true"))
-      YamlConfig().toString ==> "YamlConfig(" + YamlConfig().productIterator.mkString(",") + ")"
+      base.toString ==> "YamlConfig(" + base.productIterator.mkString(",") + ")"
     }
   }
 
@@ -98,13 +100,13 @@ final class DecodingErrorModesSpec extends MacroSuite {
       assert(runtime.isLeft)
       Counted.calls.get ==> 0
       Counted.calls.set(0)
-      ErrorModeInstances.FailFast.counted.construct(node("first: 1\nsecond: x\nthird: 3"))
-        .isLeft ==> true
+      ErrorModeInstances.FailFast.counted.construct(node("first: 1\nsecond: x\nthird: 3")).isLeft ==> true
       Counted.calls.get ==> 1
     }
 
     test("nested failure: the first one only") {
-      val error = errorOf(ErrorModeInstances.FailFast.person.construct(node(brokenPerson.replace("age: thirty", "age: 30"))))
+      val error =
+        errorOf(ErrorModeInstances.FailFast.person.construct(node(brokenPerson.replace("age: thirty", "age: 30"))))
       assert(error.errorMsg.contains("abc"), error.errorMsg)
       paths(error) ==> List("")
     }
@@ -185,7 +187,8 @@ final class DecodingErrorModesSpec extends MacroSuite {
     }
 
     test("missing keys are failures of their fields; absent Options and defaults are not") {
-      val error = errorOf(ErrorModeInstances.Accumulating.person.construct(node("age: 1\naddress: {}\ntags: []\nscores: {}")))
+      val error =
+        errorOf(ErrorModeInstances.Accumulating.person.construct(node("age: 1\naddress: {}\ntags: []\nscores: {}")))
       paths(error) ==> List(".name", ".address.street", ".address.zip")
       assert(error.getMessage.contains("Key name doesn't exist"), error.getMessage)
     }

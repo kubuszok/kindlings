@@ -22,8 +22,8 @@ final class YamlDecodingFailures(val failures: List[YamlDecodingFailure])
 
 object YamlDecodingFailures {
 
-  /** The individual failures in `error`: the accumulated ones when it was returned by a decoder that accumulates errors,
-    * otherwise `error` itself (with an empty path).
+  /** The individual failures in `error`: the accumulated ones when it was returned by a decoder that accumulates
+    * errors, otherwise `error` itself (with an empty path).
     */
   def of(error: ConstructError): List[YamlDecodingFailure] = error.getCause match {
     case failures: YamlDecodingFailures => failures.failures
