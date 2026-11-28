@@ -468,6 +468,18 @@ object JsoniterDerivationUtils {
     */
   def notImplemented[A]: A = throw new NotImplementedError()
 
+  /** The decoding of a codec derived only for a user's codec to encode with. */
+  def encodingOnlyDecodeValue[A](in: JsonReader, default: A): A = {
+    val _ = (in, default)
+    throw new NotImplementedError("this codec was derived only to encode values with a user's codec")
+  }
+
+  /** The encoding of a codec derived only for a user's codec to decode with. */
+  def decodingOnlyEncodeValue[A](x: A, out: JsonWriter): Unit = {
+    val _ = (x, out)
+    throw new NotImplementedError("this codec was derived only to decode values with a user's codec")
+  }
+
   /** Decodes a field of type `::` that has a default value: an empty JSON array decodes as the default (as in
     * jsoniter-scala, `::` having no empty value), anything else with `decode`.
     */

@@ -1,6 +1,12 @@
 package hearth.kindlings.jsoniterderivation
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString, JsonReader, JsonValueCodec, JsonWriter}
+import com.github.plokhotnyuk.jsoniter_scala.core.{
+  readFromString,
+  writeToString,
+  JsonReader,
+  JsonValueCodec,
+  JsonWriter
+}
 import hearth.MacroSuite
 
 // A user's generic codec for a generic case class, whose JSON is deliberately not the structural one: it is only used

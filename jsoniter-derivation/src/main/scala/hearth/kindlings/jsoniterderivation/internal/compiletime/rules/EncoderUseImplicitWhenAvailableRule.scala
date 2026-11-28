@@ -5,6 +5,8 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+
 trait EncoderUseImplicitWhenAvailableRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
@@ -24,11 +26,24 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
                   Expr.splice(instanceExpr).encodeValue(Expr.splice(ectx.value), Expr.splice(ectx.writer))
                 }))
             case Left(reason) =>
-              MIO.pure(
-                Rule.yielded(
-                  s"The type ${Type[A].prettyPrint} does not have an implicit JsonValueCodec instance: $reason"
-                )
-              )
+              implicit val CodecA: Type[JsonValueCodec[A]] = CTypes.JsonValueCodec[A]
+              summonJsonValueCodecSearch[A].crashReason match {
+                case Some(crash) =>
+                  failOnCrashedUserInstance[JsonValueCodec[A], Rule.Applicability[Expr[Unit]]](crash)
+                case None =>
+                  // a user's generic codec that needs codecs Kindlings derives (e.g. `JsonValueCodec[Page[Item]]`
+                  // built from a derived codec of `Item`)
+                  completeUserCodecForEncoder[A].map {
+                    case Some(instanceExpr) =>
+                      Rule.matched(Expr.quote {
+                        Expr.splice(instanceExpr).encodeValue(Expr.splice(ectx.value), Expr.splice(ectx.writer))
+                      })
+                    case None =>
+                      Rule.yielded(
+                        s"The type ${Type[A].prettyPrint} does not have an implicit JsonValueCodec instance: $reason"
+                      )
+                  }
+              }
           }
       }
   }
