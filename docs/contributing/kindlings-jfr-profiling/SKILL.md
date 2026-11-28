@@ -27,17 +27,41 @@ Two complementary techniques, both driven through the existing JMH harness:
 > expansion. This skill is about **runtime** profiling of the generated code. Different tool,
 > different phase.
 
-## JDK gating — check first
+## Pin the benchmark JDK — Temurin 25
 
-JEP 520 events require **JDK 25+** and are standard GA JFR events (not experimental, no unlock
-flag). Verify both the JDK and that the events exist in this VM:
+Benchmarks are measured on **Temurin 25** (HotSpot C2), not on whatever JDK runs sbt. GraalVM CE's
+JIT inlines Kindlings' factory+lambda instance shape differently (~20% slower on some benchmarks
+than C2), so numbers taken on it are not comparable with what users run.
+
+The `benchmarks` project points the `Jmh/run` runner JVM at `$KINDLINGS_BENCH_JAVA_HOME`
+(`Jmh / run / javaHome`); JMH forks the benchmark JVMs from the runner's `java.home`, so every fork
+uses it. Fetch Temurin 25 into coursier's cache (no system-wide install) and start the sbt server
+with the variable set — the server reads it once, at start-up:
 
 ```bash
-java -version                              # need 25+
-jfr metadata | grep -E 'MethodTiming|MethodTrace'   # both must be listed
+sbt --client shutdown                                          # if a server is already running
+export KINDLINGS_BENCH_JAVA_HOME="$(cs java-home --jvm temurin:25)"
+sbt --client 'benchmarks/Jmh/run -f 2 -wi 5 -i 10 ".*JsoniterBenchmark.*"'
 ```
 
-- **Dev machine** currently runs GraalVM CE 25 → method timing available.
+- `Jmh/run` logs `JMH runs on the pinned JDK ...`, or a **warning** when the variable is unset (the
+  runs then use the sbt server's JDK). A path without `bin/java` fails the task.
+- Check JMH's header: `# VM version: JDK 25...` and `# VM invoker: .../temurin25.../bin/java`.
+- One-off alternative without restarting the server: pass the JVM to JMH directly,
+  `benchmarks/Jmh/run -jvm <temurin-home>/bin/java ...` (the shell expands `$(cs java-home ...)`).
+- `benchmarks` is Scala 3, `benchmarks2_13` Scala 2.13; the pin applies to both.
+
+## JDK gating for method timing — check first
+
+JEP 520 events require **JDK 25+** and are standard GA JFR events (not experimental, no unlock
+flag). The pinned Temurin 25 has them. Verify both the JDK and that the events exist in this VM:
+
+```bash
+"$KINDLINGS_BENCH_JAVA_HOME/bin/java" -version                                # need 25+
+"$KINDLINGS_BENCH_JAVA_HOME/bin/jfr" metadata | grep -E 'MethodTiming|MethodTrace'   # both must be listed
+```
+
+- **Pinned Temurin 25** → method timing available.
 - **CI / Temurin 17** → events absent; fall back to **sampling** (§ Sampling recipe). Everything
   in the sampling section works on 17.
 
@@ -60,7 +84,7 @@ JMH's `-prof jfr` starts/stops the recording around the **measurement** phase on
 excluded by design) and writes **one `profile.jfr` per fork**.
 
 ```bash
-sbt --client 'benchmarks3/Jmh/run -f 1 -wi 5 -i 10 \
+sbt --client 'benchmarks/Jmh/run -f 1 -wi 5 -i 10 \
   -prof "jfr:dir=/tmp/kindlings-jfr;configName=profile;debugNonSafePoints=true;stackDepth=256" \
   ".*JsoniterWriteBenchmark.kindlingsSemiAutoPerson"'
 ```
@@ -121,7 +145,7 @@ The hot-methods view names the exact synthetic class (`...$$anon$N`) and method
 ### Step 2 — run JMH with the custom config
 
 ```bash
-sbt --client 'benchmarks3/Jmh/run -f 1 -wi 5 -i 10 \
+sbt --client 'benchmarks/Jmh/run -f 1 -wi 5 -i 10 \
   -prof "jfr:dir=/tmp/kindlings-jfr;configName=/abs/path/benchmarks/method-timing.jfc;stackDepth=64;verbose=true" \
   ".*JsoniterWriteBenchmark.kindlingsSemiAutoPerson"'
 ```

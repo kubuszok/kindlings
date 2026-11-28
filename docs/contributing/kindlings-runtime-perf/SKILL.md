@@ -296,10 +296,12 @@ Field indices are known at compile time from the schema/type structure. This eli
 
 After applying these optimizations to a module:
 
-1. **Tests**: `sbt --client "<module>3/clean ; <module>3/test ; <module>/clean ; <module>/test"`
+1. **Tests**: `sbt --client "<module>/clean ; <module>/test ; <module>2_13/clean ; <module>2_13/test"`
 2. **Bytecode check**: `javap -c -p <class> | grep "boxTo\|unboxTo\|BoxesRunTime"` — should find NO boxing for optimized case class codecs
-3. **Benchmark**: `sbt --client 'benchmarks3/Jmh/run -f 2 -wi 5 -i 10 ".*<Module>Benchmark.*SimpleCC"'`
-4. **JFR profile**: `sbt --client 'benchmarks3/Jmh/run -prof jfr:dir=/tmp/jfr -f 1 ...'` — confirm no `fieldNameMapper`, `BoxesRunTime`, `Function0/2.apply` in hot path
+3. **Benchmark** (on the pinned Temurin 25: `export KINDLINGS_BENCH_JAVA_HOME="$(cs java-home --jvm temurin:25)"` before
+   starting the sbt server, see `../kindlings-jfr-profiling/SKILL.md` § "Pin the benchmark JDK"):
+   `sbt --client 'benchmarks/Jmh/run -f 2 -wi 5 -i 10 ".*<Module>Benchmark.*SimpleCC"'`
+4. **JFR profile**: `sbt --client 'benchmarks/Jmh/run -prof jfr:dir=/tmp/jfr -f 1 ...'` — confirm no `fieldNameMapper`, `BoxesRunTime`, `Function0/2.apply` in hot path
 
 ## Related skills
 
