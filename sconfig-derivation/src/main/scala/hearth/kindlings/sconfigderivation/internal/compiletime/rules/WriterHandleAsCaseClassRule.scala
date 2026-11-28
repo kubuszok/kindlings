@@ -56,7 +56,7 @@ trait WriterHandleAsCaseClassRuleImpl {
         case None    => Expr.quote(Expr.splice(wctx.config).transformMemberNames)
       }
 
-      val allFields = caseClass.caseFieldValuesAt(wctx.value).toList
+      val allFields = allCaseFieldValuesAt(caseClass, wctx.value).toList
 
       val paramsByName: Map[String, Parameter] =
         if (allFields.isEmpty) Map.empty

@@ -248,7 +248,7 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
       hdExpr: Expr[Any],
       tlExpr: Expr[F[Any]]
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
-    val fields = caseClass.caseFieldValuesAt(tlExpr).toList
+    val fields = allCaseFieldValuesAt(caseClass, tlExpr).toList
 
     var carried: Option[Expr[Any]] = Some(hdExpr)
     val resultFields = scala.collection.mutable.ListBuffer.empty[(String, Expr_??)]

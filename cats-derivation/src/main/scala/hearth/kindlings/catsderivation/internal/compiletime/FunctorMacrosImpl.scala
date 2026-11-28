@@ -251,7 +251,7 @@ trait FunctorMacrosImpl
     parseCaseClassMIO[F[A]]("F[A]").parTuple(parseCaseClassMIO[F[B]]("F[B]")).flatMap { case (caseClass, caseClassB) =>
       val bFieldMap = caseClassB.primaryConstructor.totalParameters.flatten.toMap
 
-      val fields = caseClass.caseFieldValuesAt(faExpr).toList
+      val fields = allCaseFieldValuesAt(caseClass, faExpr).toList
 
       val mappedFieldsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, fieldValue) =>
         import fieldValue.Underlying as Field
@@ -431,7 +431,7 @@ trait FunctorMacrosImpl
                         case Left(_) =>
                           MIO.pure(caseValue.upcast[F[Any]])
                         case Right(childCC) =>
-                          val fields = childCC.caseFieldValuesAt(caseValue).toList
+                          val fields = allCaseFieldValuesAt(childCC, caseValue).toList
                           if (fields.isEmpty) {
                             MIO.pure(caseValue.upcast[F[Any]])
                           } else {

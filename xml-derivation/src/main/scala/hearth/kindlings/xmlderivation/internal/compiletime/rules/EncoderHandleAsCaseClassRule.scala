@@ -20,7 +20,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
+            val allFields = allCaseFieldValuesAt(caseClass, ectx.value).toList
             if (allFields.isEmpty)
               MIO.pure(
                 Rule.yielded(s"The type ${Type[A].prettyPrint} is an empty case class, handled by singleton rule")
@@ -46,7 +46,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
       implicit val NodeBufferT: Type[scala.collection.mutable.ListBuffer[scala.xml.Node]] = Types.NodeBuffer
       implicit val xmlNameT: Type[xmlName] = Types.XmlNameAnnotation
 
-      val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
+      val allFields = allCaseFieldValuesAt(caseClass, ectx.value).toList
       val paramsByName: Map[String, Parameter] =
         if (allFields.isEmpty) Map.empty
         else caseClass.primaryConstructor.totalParameters.flatten.toMap

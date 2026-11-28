@@ -34,8 +34,8 @@ trait EqCaseClassRuleImpl {
         x: Expr[A],
         y: Expr[A]
     ): MIO[Expr[Boolean]] = {
-      val fields = caseClass.caseFieldValuesAt(x).toList
-      val fieldsY = caseClass.caseFieldValuesAt(y).toList
+      val fields = allCaseFieldValuesAt(caseClass, x).toList
+      val fieldsY = allCaseFieldValuesAt(caseClass, y).toList
 
       NonEmptyList.fromList(fields.zip(fieldsY)) match {
         case Some(fieldPairs) =>

@@ -36,7 +36,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
       implicit val fieldNameT: Type[fieldName] = Types.FieldName
       implicit val transientFieldT: Type[transientField] = Types.TransientField
 
-      val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
+      val allFields = allCaseFieldValuesAt(caseClass, ectx.value).toList
 
       // Singletons (case objects, parameterless enum cases) have no primary constructor.
       // Only access primaryConstructor when there are actual fields to process.

@@ -35,7 +35,7 @@ trait HashCaseClassRuleImpl {
         value: Expr[A]
     ): MIO[Expr[Int]] = {
       implicit val IntType: Type[Int] = HashTypes.Int
-      val fields = caseClass.caseFieldValuesAt(value).toList
+      val fields = allCaseFieldValuesAt(caseClass, value).toList
 
       NonEmptyList.fromList(fields) match {
         case Some(fieldValues) =>

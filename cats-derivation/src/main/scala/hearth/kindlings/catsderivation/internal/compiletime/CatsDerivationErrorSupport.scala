@@ -10,7 +10,8 @@ import hearth.fp.effect.*
   */
 private[compiletime] trait CatsDerivationErrorSupport
     extends hearth.kindlings.derivation.compiletime.MethodFolds
-    with hearth.kindlings.derivation.compiletime.JavaEnumSupport {
+    with hearth.kindlings.derivation.compiletime.JavaEnumSupport
+    with hearth.kindlings.derivation.compiletime.CaseFieldValuesSupport {
   this: MacroCommons =>
 
   import CatsDerivationError.*

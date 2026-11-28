@@ -168,7 +168,7 @@ trait WrappedFieldsSupport extends CatsDerivationTimeout with CatsDerivationErro
                 // Splice bodies are plain functions (Scala 2's cross-quotes keep splices simple).
                 val fieldsBody: Expr[Any] => Expr[Array[Any]] = { fa =>
                   val value: Expr[F[Any]] = Expr.quote(Expr.splice(fa).asInstanceOf[F[Any]])
-                  arrayOf(ccAny.caseFieldValuesAt(value).toList.map { case (_, fieldValue) =>
+                  arrayOf(allCaseFieldValuesAt(ccAny, value).toList.map { case (_, fieldValue) =>
                     import fieldValue.Underlying as Field
                     fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
                   })

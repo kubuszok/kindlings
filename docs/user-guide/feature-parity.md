@@ -237,6 +237,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 
 | Feature | kittens | Kindlings | Status |
 |---|---|---|---|
+| `private val` constructor fields | Included by every type class (`Show`, `Eq`, `Order`, `Hash`, `Semigroup`, `Functor`, `Traverse`, ...) | Same (fixed: `Show`/`Eq`/`Order`/`Hash` used to ignore them; `Semigroup`, `Monoid`, `Functor`, `Traverse` & co. failed to derive) | Parity |
 | Case classes (products) | Yes | Yes | Parity |
 | Sealed traits (coproducts) — Show, Eq, Order, Hash | Yes | Yes | Parity |
 | Sealed traits (coproducts) — Functor, Foldable, Traverse (e.g., `IList[A]`) | Yes (both, via Shapeless on 2 / Mirrors on 3) | Yes (both Scala 2+3) | Parity |
@@ -414,6 +415,7 @@ still keep the first algebra's members without `F`. The shapes blocked by Hearth
 
 | Type | Support |
 |---|---|
+| Case classes with `private val` constructor fields | Compared like every other field (fixed: they used to be ignored, so values differing only there were reported identical) |
 | Primitives, String | Built-in (value comparison + string diff) |
 | Case classes | Field-by-field structural diff → `DiffResult.Record` |
 | Sealed traits | Variant matching → `DiffResult.Variant` / `DiffResult.TypeMismatch` |
@@ -517,6 +519,7 @@ of the name transformations, `decodeStrict`, compile-time errors, the macro anno
 
 | Feature | circe | Kindlings | Status |
 |---|---|---|---|
+| `private val` constructor fields | Encoded and decoded (Shapeless / `Mirror` read every constructor parameter) | Same (fixed: the encoder used to leave them out, so the decoder could not read its output) | Parity |
 | Explicit unwrapping | `deriveUnwrapped*` (any single-field case class; both Scala 2+3) | `KindlingsEncoder/KindlingsDecoder.deriveUnwrapped` (same) | Parity |
 | Tuples | Encoded/decoded as JSON arrays of the exact arity | Same, also for tuples containing derived types | Parity |
 | Recursive types | Scala 2: needs Shapeless `Lazy`; Scala 3: broken with fully-automatic `generic.auto` derivation ([#1980](https://github.com/circe/circe/issues/1980)) | Works without wrappers | Improvement |
@@ -863,6 +866,7 @@ Type-class instances for primitives, collections, java.time, `java.net`, `java.n
 
 | Feature | PureConfig | Kindlings | Status |
 |---|---|---|---|
+| `private val` constructor fields | Written and read | Same (fixed: the writer used to leave them out) | Parity |
 | Primitives, `String`, `BigDecimal`, `BigInt` | Yes (via `BasicReaders`) | Reused from upstream | Parity |
 | `Option[A]` (missing key → `None`) | Yes (via `optionReader`) | Reused from upstream | Parity |
 | `ReadsMissingKeys` readers of field types | A reader that is a `ReadsMissingKeys` is given the missing key; any other reader (also a user-provided one of an `Option` type) gets `KeyNotFound` | Same | Parity |
@@ -995,6 +999,7 @@ objects, no upstream counterpart), `@configKey`, `@transientField`.
 
 | Feature | Manual / scalacheck-shapeless | Kindlings | Status |
 |---|---|---|---|
+| `private val` constructor fields | Perturbed (`Cogen`) and shrunk (`Shrink`) like the other fields | Same | Parity |
 | Primitives (`Boolean`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`, `Char`, `String`, `Unit`) | ScalaCheck built-in | Yes (built-in rule) | Parity |
 | `BigInt`, `BigDecimal` | ScalaCheck built-in | Yes (built-in rule) | Parity |
 | Case classes | scalacheck-shapeless: yes; manual: tedious | Yes | Parity |
@@ -1069,6 +1074,7 @@ Because no upstream library does derivation against sconfig today, this module i
 
 | Behaviour | Description |
 |---|---|
+| `private val` constructor fields | Written and read, as PureConfig (fixed: the writer used to leave them out) |
 | Failure accumulation | Every failing field of a case class is reported, then each unknown key of a strict one; every failing item of a collection and value of a map |
 | Missing keys | `KeyNotFound` at the object that lacks the key, with upstream's candidate keys (`KeyNotFound.forKeys`); readers of missing keys (`Option` fields, `ReadsMissingKeys` readers) read the missing key instead (an `Option` reads it as `None`) |
 | Failure paths | A missing key at the object, any other failure at the offending value (`path` lists keys / list indices from the value the reader was called with — sconfig readers read a `ConfigValue`, not a cursor) |
@@ -1376,6 +1382,7 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 
 | Type | Support |
 |---|---|
+| Case classes with `private val` constructor fields | A compile-time error, as in jsoniter-scala and jsoniter-derivation (`'b' parameter of 'C' should be defined as 'val' or 'var' in the primary constructor.`) |
 | Primitives (`Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`) | Yes (native UBJson types) |
 | `String` | Yes |
 | `BigDecimal`, `BigInt` | Yes (with configurable DoS protection) |
@@ -1555,6 +1562,7 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 
 | Type | Support |
 |---|---|
+| Case classes with `private val` constructor fields | Written and read (fixed: the encoder used to leave them out) |
 | Primitives (`Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`) | Yes (text representation, surrounding whitespace ignored; a `Char` is kept exactly) |
 | `String` | Yes (whitespace kept exactly; an empty element or attribute value is `""`) |
 | `BigDecimal`, `BigInt` | Yes (text representation, surrounding whitespace ignored) |
@@ -1590,6 +1598,9 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 ## fast-show-pretty
 
 **Original type class** — no replacement target. Provides configurable pretty-printing with indentation support for case classes, collections, maps, and primitives. Cross-compiled for Scala 2.13 + 3, JVM + JS + Native.
+
+`private val` constructor fields are rendered like the other fields, as by a case class's `toString` (fixed: they
+used to be left out).
 
 ### Annotations
 
